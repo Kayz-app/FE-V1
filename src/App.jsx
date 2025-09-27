@@ -1,7 +1,8 @@
     
 
     import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { callAIAPI } from "./api/ai";
+import { callAIAPI } from "./api/api.ai";
+import { useWeb3 } from './contexts/Web3Context';
 
 // --- MOCK DATA --- //
 // In a real application, this data would come from a secure backend and blockchain.
@@ -72,6 +73,7 @@ const initialProjects = [
     projectWalletBalance: 5000, // For APY payments
     completionDate: '2024-05-15T00:00:00Z',
     fundsWithdrawn: true,
+    contractAddress: '0x1234567890123456789012345678901234567890', // Mock contract address
   },
   {
     id: 2,
@@ -96,6 +98,7 @@ const initialProjects = [
     status: 'active',
     projectWalletBalance: 12000,
     fundsWithdrawn: false,
+    contractAddress: '0x2345678901234567890123456789012345678901', // Mock contract address
   },
   {
     id: 3,
@@ -119,6 +122,7 @@ const initialProjects = [
     status: 'active',
     projectWalletBalance: 0,
     fundsWithdrawn: false,
+    contractAddress: '0x3456789012345678901234567890123456789012', // Mock contract address
   },
   {
     id: 4,
@@ -142,6 +146,7 @@ const initialProjects = [
     status: 'pending', // Submitted for admin approval
     projectWalletBalance: 0,
     fundsWithdrawn: false,
+    contractAddress: '0x4567890123456789012345678901234567890123', // Mock contract address
   },
 ];
 
@@ -4309,6 +4314,9 @@ const Footer = ({ setPage, page }) => {
 
 // --- MAIN APP COMPONENT --- //
 export default function App() {
+    // Web3 context
+    const { isConnected, userAddress, web3Service } = useWeb3();
+    
     // State management
     const [page, setPage] = useState('landing'); // landing, login, register, forgotPassword, investorDashboard, etc.
     const [currentUser, setCurrentUser] = useState(null);
@@ -4477,7 +4485,7 @@ export default function App() {
 
     };
     
-    const handleInvest = (projectId, amount) => {
+    const handleInvest = async (projectId, amount) => {
         if (currentUser && currentUser.type === 'developer') {
             alert("Developers are not permitted to invest in projects.");
             return;
@@ -4493,81 +4501,109 @@ export default function App() {
             return;
         }
 
-        const fee = amount * 0.015;
-        const totalDebit = amount + fee;
-        const userWallet = users[currentUser.email].wallet;
-        const totalStablecoin = userWallet.usdt + userWallet.usdc;
-
-        if (!currentUser || totalStablecoin < totalDebit) {
-            alert("Insufficient stablecoin balance (USDT/USDC) for this investment.");
+        if (!isConnected) {
+            alert("Please connect your wallet to make an investment.");
             return;
         }
 
-        let remainingDebit = totalDebit;
-        let newUsdt = userWallet.usdt;
-        let newUsdc = userWallet.usdc;
-
-        if (newUsdt >= remainingDebit) {
-            newUsdt -= remainingDebit;
-            remainingDebit = 0;
-        } else {
-            remainingDebit -= newUsdt;
-            newUsdt = 0;
-        }
-
-        if (remainingDebit > 0 && newUsdc >= remainingDebit) {
-            newUsdc -= remainingDebit;
-            remainingDebit = 0;
-        }
-
-        // 1. Debit investor's wallet
-        const updatedUser = {
-            ...users[currentUser.email],
-            wallet: {
-                ...userWallet,
-                usdt: newUsdt,
-                usdc: newUsdc
+        try {
+            // Find the project to get its contract address
+            const project = projects.find(p => p.id === projectId);
+            if (!project || !project.contractAddress) {
+                alert("Project contract address not found. Please try again.");
+                return;
             }
-        };
 
-        setCurrentUser(updatedUser);
-        setUsers(prevUsers => ({
-            ...prevUsers,
-            [currentUser.email]: updatedUser
-        }));
+            // Show loading state
+            const loadingAlert = alert("Processing investment transaction...");
 
-        // 2. Update project's amountRaised
-        setProjects(prevProjects => prevProjects.map(p => 
-            p.id === projectId 
-            ? { ...p, amountRaised: p.amountRaised + amount, status: (p.amountRaised + amount) >= p.fundingGoal ? 'funded' : p.status } 
-            : p
-        ));
-
-        // 3. Create new tokens for the investor
-        setPortfolios(prevPortfolios => {
-            const newPortfolios = JSON.parse(JSON.stringify(prevPortfolios));
-            const userPortfolio = newPortfolios[currentUser.id] || { tokens: [] };
+            // Call smart contract invest function
+            const receipt = await web3Service.investInProject(project.contractAddress, amount);
             
-            userPortfolio.tokens.push({
-                tokenId: `proj${projectId}-sec-${Date.now()}`,
-                projectId,
-                type: 'SECURITY',
-                amount,
-                originalOwnerId: currentUser.id,
-                lastApyClaimDate: new Date().toISOString(),
+            // Close loading alert
+            if (loadingAlert) window.close();
+
+            // Update local state to reflect the investment
+            const fee = amount * 0.015;
+            const totalDebit = amount + fee;
+            const userWallet = users[currentUser.email].wallet;
+            const totalStablecoin = userWallet.usdt + userWallet.usdc;
+
+            if (totalStablecoin < totalDebit) {
+                alert("Insufficient stablecoin balance (USDT/USDC) for this investment.");
+                return;
+            }
+
+            let remainingDebit = totalDebit;
+            let newUsdt = userWallet.usdt;
+            let newUsdc = userWallet.usdc;
+
+            if (newUsdt >= remainingDebit) {
+                newUsdt -= remainingDebit;
+                remainingDebit = 0;
+            } else {
+                remainingDebit -= newUsdt;
+                newUsdt = 0;
+            }
+
+            if (remainingDebit > 0 && newUsdc >= remainingDebit) {
+                newUsdc -= remainingDebit;
+                remainingDebit = 0;
+            }
+
+            // Update user wallet
+            const updatedUser = {
+                ...users[currentUser.email],
+                wallet: {
+                    ...userWallet,
+                    usdt: newUsdt,
+                    usdc: newUsdc
+                }
+            };
+
+            setCurrentUser(updatedUser);
+            setUsers(prevUsers => ({
+                ...prevUsers,
+                [currentUser.email]: updatedUser
+            }));
+
+            // Update project's amount raised
+            setProjects(prevProjects => prevProjects.map(p => 
+                p.id === projectId 
+                ? { ...p, amountRaised: p.amountRaised + amount, status: (p.amountRaised + amount) >= p.fundingGoal ? 'funded' : p.status } 
+                : p
+            ));
+
+            // Create new tokens for the investor
+            setPortfolios(prevPortfolios => {
+                const newPortfolios = JSON.parse(JSON.stringify(prevPortfolios));
+                const userPortfolio = newPortfolios[currentUser.id] || { tokens: [] };
+                
+                userPortfolio.tokens.push({
+                    tokenId: `proj${projectId}-sec-${Date.now()}`,
+                    projectId,
+                    type: 'SECURITY',
+                    amount,
+                    originalOwnerId: currentUser.id,
+                    lastApyClaimDate: new Date().toISOString(),
+                });
+                userPortfolio.tokens.push({
+                    tokenId: `proj${projectId}-mkt-${Date.now()}`,
+                    projectId,
+                    type: 'MARKET',
+                    amount,
+                    ownerId: currentUser.id,
+                    status: 'held',
+                });
+                newPortfolios[currentUser.id] = userPortfolio;
+                return newPortfolios;
             });
-            userPortfolio.tokens.push({
-                tokenId: `proj${projectId}-mkt-${Date.now()}`,
-                projectId,
-                type: 'MARKET',
-                amount,
-                ownerId: currentUser.id,
-                status: 'held',
-            });
-            newPortfolios[currentUser.id] = userPortfolio;
-            return newPortfolios;
-        });
-        // alert(`Congratulations! Your investment of ${formatCurrency(amount)} was successful.`);
+
+            alert(`Investment successful! Transaction hash: ${receipt.transactionHash}`);
+        } catch (error) {
+            console.error('Investment failed:', error);
+            alert(`Investment failed: ${error.message}`);
+        }
     };
 
     const renderPage = () => {

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useWeb3 } from '../../../contexts/Web3Context';
 
 // --- INLINED ICONS & HELPERS --- //
 const SparklesIcon = (props) => (
@@ -15,11 +16,13 @@ const callAIAPI = async () => "AI Generated Description Placeholder";
 // --- END OF INLINED COMPONENTS --- //
 
 const DeveloperCreateProject = () => {
+    const { isConnected, web3Service } = useWeb3();
     const [formData, setFormData] = useState({
         projectTitle: '', location: '', description: '', fundingGoal: '',
         apy: '', term: '', tokenSupply: '', tokenTicker: '',
     });
     const [impliedPrice, setImpliedPrice] = useState(0);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     useEffect(() => {
         const goal = parseFloat(String(formData.fundingGoal).replace(/,/g, ''));
@@ -39,9 +42,44 @@ const DeveloperCreateProject = () => {
         }
     };
     
-    const handleSubmitForReview = (e) => {
+    const handleSubmitForReview = async (e) => {
         e.preventDefault();
-        alert('Project submitted for review!');
+        
+        if (!isConnected) {
+            alert('Please connect your wallet to create a project.');
+            return;
+        }
+
+        setIsSubmitting(true);
+        
+        try {
+            const fundingGoal = parseFloat(String(formData.fundingGoal).replace(/,/g, ''));
+            const apyRate = parseFloat(formData.apy) * 100; // Convert to basis points
+            const termMonths = parseInt(formData.term);
+            const totalTokenSupplyCap = parseFloat(String(formData.tokenSupply).replace(/,/g, ''));
+
+            // Create project on blockchain
+            const projectAddress = await web3Service.createProject(
+                fundingGoal,
+                apyRate,
+                termMonths,
+                totalTokenSupplyCap
+            );
+
+            alert(`Project created successfully! Contract address: ${projectAddress}`);
+            
+            // Reset form
+            setFormData({
+                projectTitle: '', location: '', description: '', fundingGoal: '',
+                apy: '', term: '', tokenSupply: '', tokenTicker: '',
+            });
+            
+        } catch (error) {
+            console.error('Project creation failed:', error);
+            alert(`Project creation failed: ${error.message}`);
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     return (
@@ -55,8 +93,21 @@ const DeveloperCreateProject = () => {
                 </div>
                 {/* ... other form fields ... */}
                 <div className="flex justify-end pt-4">
-                    <button type="submit" className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700">Submit for Review</button>
+                    <button 
+                        type="submit" 
+                        disabled={isSubmitting || !isConnected}
+                        className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                    >
+                        {isSubmitting ? 'Creating Project...' : 'Create Project'}
+                    </button>
                 </div>
+                {!isConnected && (
+                    <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-md">
+                        <p className="text-yellow-800 text-sm">
+                            Please connect your wallet to create a project on the blockchain.
+                        </p>
+                    </div>
+                )}
             </form>
         </div>
     );

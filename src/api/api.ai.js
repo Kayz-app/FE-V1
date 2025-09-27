@@ -48,8 +48,9 @@ export const callAIAPI = async (input, options = {}) => {
         errBody = await resp.text();
       }
       throw new Error(
-        \`Backend AI API Error: \${resp.status} - \${JSON.stringify(errBody)}\`
+        `Backend AI API Error: ${resp.status} - ${JSON.stringify(errBody)}`
       );
+      // End execution after throwing error
     }
 
     const data = await resp.json();

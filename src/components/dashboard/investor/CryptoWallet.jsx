@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useWeb3 } from '../../contexts/Web3Context';
 
 // --- INLINED ICONS & COMPONENTS --- //
 const ArrowDownLeftIcon = (props) => ( <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m17 17-10-10"/><path d="M17 7v10H7"/></svg> );
@@ -19,7 +20,10 @@ const WalletModal = ({ isOpen, onClose, children, title }) => {
 };
 
 const CryptoWallet = ({ wallet }) => {
+    const { isConnected, userAddress, web3Service } = useWeb3();
     const [modalConfig, setModalConfig] = useState({ isOpen: false, action: null, currency: null });
+    const [withdrawForm, setWithdrawForm] = useState({ address: '', amount: '' });
+    const [isProcessing, setIsProcessing] = useState(false);
 
     // Guard clause to prevent crash if wallet data is not ready
     if (!wallet) {
@@ -27,7 +31,54 @@ const CryptoWallet = ({ wallet }) => {
     }
 
     const openModal = (action, currency) => setModalConfig({ isOpen: true, action, currency });
-    const closeModal = () => setModalConfig({ isOpen: false, action: null, currency: null });
+    const closeModal = () => {
+        setModalConfig({ isOpen: false, action: null, currency: null });
+        setWithdrawForm({ address: '', amount: '' });
+    };
+
+    const handleWithdraw = async (e) => {
+        e.preventDefault();
+        
+        if (!isConnected) {
+            alert('Please connect your wallet to perform withdrawals.');
+            return;
+        }
+
+        if (!withdrawForm.address || !withdrawForm.amount) {
+            alert('Please fill in all fields.');
+            return;
+        }
+
+        setIsProcessing(true);
+        
+        try {
+            // For demo purposes, we'll simulate a withdrawal
+            // In a real app, you'd interact with the actual token contracts
+            const amount = parseFloat(withdrawForm.amount);
+            
+            if (amount <= 0) {
+                alert('Please enter a valid amount.');
+                return;
+            }
+
+            // Simulate transaction
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            
+            alert(`Withdrawal of ${amount} ${modalConfig.currency} to ${withdrawForm.address} initiated successfully!`);
+            closeModal();
+            
+        } catch (error) {
+            console.error('Withdrawal failed:', error);
+            alert(`Withdrawal failed: ${error.message}`);
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
+    const copyToClipboard = (text) => {
+        navigator.clipboard.writeText(text);
+        alert('Address copied to clipboard!');
+    };
 
     const cryptoAssets = [
         { name: 'USDT', balance: wallet.usdt, logo: 'https://cryptologos.cc/logos/tether-usdt-logo.svg?v=023' },
@@ -52,17 +103,58 @@ const CryptoWallet = ({ wallet }) => {
             <WalletModal isOpen={modalConfig.isOpen} onClose={closeModal} title={`${modalConfig.action} ${modalConfig.currency}`}>
                 {modalConfig.action === 'Deposit' && (
                     <div>
-                        <p className="text-sm text-center text-gray-600 mb-4">Send {modalConfig.currency} to this TRC20 address.</p>
-                        <div className="bg-gray-100 p-3 rounded-md text-center"><p className="text-xs text-gray-500 mb-1">Your {modalConfig.currency} Deposit Address</p><p className="font-mono break-all">TAbcdeFGHIjklmnoPQRSTuvwxyz12345</p></div>
-                        <button className="mt-4 w-full flex items-center justify-center bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded"><ClipboardIcon className="w-4 h-4 mr-2"/> Copy Address</button>
+                        <p className="text-sm text-center text-gray-600 mb-4">Send {modalConfig.currency} to this address.</p>
+                        <div className="bg-gray-100 p-3 rounded-md text-center">
+                            <p className="text-xs text-gray-500 mb-1">Your {modalConfig.currency} Deposit Address</p>
+                            <p className="font-mono break-all">{userAddress || 'Connect wallet to see address'}</p>
+                        </div>
+                        <button 
+                            onClick={() => copyToClipboard(userAddress || '')}
+                            disabled={!userAddress}
+                            className="mt-4 w-full flex items-center justify-center bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded disabled:bg-gray-100 disabled:cursor-not-allowed"
+                        >
+                            <ClipboardIcon className="w-4 h-4 mr-2"/> Copy Address
+                        </button>
+                        {!isConnected && (
+                            <p className="text-xs text-red-600 mt-2 text-center">Please connect your wallet to see deposit address</p>
+                        )}
                     </div>
                 )}
                 {modalConfig.action === 'Withdraw' && (
-                    <form className="space-y-4">
-                         <div><label className="block text-sm font-medium text-gray-700">{modalConfig.currency} Address</label><input type="text" placeholder="Enter recipient address" className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3"/></div>
-                         <div><label className="block text-sm font-medium text-gray-700">Amount</label><input type="number" placeholder="0.00" className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3"/></div>
+                    <form onSubmit={handleWithdraw} className="space-y-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700">{modalConfig.currency} Address</label>
+                            <input 
+                                type="text" 
+                                placeholder="Enter recipient address" 
+                                value={withdrawForm.address}
+                                onChange={(e) => setWithdrawForm(prev => ({ ...prev, address: e.target.value }))}
+                                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3"
+                                required
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700">Amount</label>
+                            <input 
+                                type="number" 
+                                placeholder="0.00" 
+                                value={withdrawForm.amount}
+                                onChange={(e) => setWithdrawForm(prev => ({ ...prev, amount: e.target.value }))}
+                                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3"
+                                required
+                            />
+                        </div>
                         <p className="text-xs text-gray-500">Fee: 0.5 {modalConfig.currency}</p>
-                        <button type="submit" className="w-full bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700">Confirm Withdraw</button>
+                        <button 
+                            type="submit" 
+                            disabled={isProcessing || !isConnected}
+                            className="w-full bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                        >
+                            {isProcessing ? 'Processing...' : 'Confirm Withdraw'}
+                        </button>
+                        {!isConnected && (
+                            <p className="text-xs text-red-600 text-center">Please connect your wallet to perform withdrawals</p>
+                        )}
                     </form>
                 )}
             </WalletModal>

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import WalletConnection from './WalletConnection';
 
 // Inlined icon components to resolve the import error.
 const KayzeraLogo = (props) => (
@@ -64,21 +65,24 @@ const Header = ({ setPage, currentUser, onLogout }) => {
                         </div>
                     </div>
                     <div className="hidden md:block">
-                        {currentUser ? (
-                             <div className="ml-4 flex items-center md:ml-6">
-                                <button className="p-1 rounded-full text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-                                    <BellIcon className="h-6 w-6" />
-                                </button>
-                                <button onClick={onLogout} className="ml-3 text-sm font-medium text-gray-500 hover:text-gray-900">Logout</button>
-                             </div>
-                        ) : (
-                            <div className="flex items-center">
-                                <a href="#" onClick={() => setPage('login')} className="text-sm font-medium text-gray-500 hover:text-gray-900">Sign in</a>
-                                <a href="#" onClick={() => setPage('register')} className="ml-4 inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700">
-                                    Get Started
-                                </a>
-                            </div>
-                        )}
+                        <div className="flex items-center space-x-4">
+                            <WalletConnection />
+                            {currentUser ? (
+                                 <div className="ml-4 flex items-center md:ml-6">
+                                    <button className="p-1 rounded-full text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                                        <BellIcon className="h-6 w-6" />
+                                    </button>
+                                    <button onClick={onLogout} className="ml-3 text-sm font-medium text-gray-500 hover:text-gray-900">Logout</button>
+                                 </div>
+                            ) : (
+                                <div className="flex items-center">
+                                    <a href="#" onClick={() => setPage('login')} className="text-sm font-medium text-gray-500 hover:text-gray-900">Sign in</a>
+                                    <a href="#" onClick={() => setPage('register')} className="ml-4 inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700">
+                                        Get Started
+                                    </a>
+                                </div>
+                            )}
+                        </div>
                     </div>
                     <div className="-mr-2 flex md:hidden">
                         <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="bg-white inline-flex items-center justify-center p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none">
