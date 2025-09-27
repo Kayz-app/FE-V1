@@ -48,7 +48,7 @@ app.use((err, req, res, next) => {
 });
 
 // 404 handler
-app.use('*', (req, res) => {
+app.use((req, res) => {
   res.status(404).json({ error: 'Route not found' });
 });
 
@@ -59,14 +59,21 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/kayzera',
 })
 .then(() => {
   console.log('Connected to MongoDB');
-  app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-    console.log(`Health check: http://localhost:${PORT}/api/health`);
-  });
+  startServer();
 })
 .catch((error) => {
   console.error('MongoDB connection error:', error);
-  process.exit(1);
+  console.log('Starting server without MongoDB...');
+  startServer();
 });
+
+function startServer() {
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+    console.log(`Health check: http://localhost:${PORT}/api/health`);
+    console.log(`Frontend: http://localhost:5173`);
+    console.log(`OpenAI API Key configured: ${process.env.OPENAI_API_KEY ? 'Yes' : 'No'}`);
+  });
+}
 
 module.exports = app;

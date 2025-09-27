@@ -4,10 +4,13 @@ const { authMiddleware } = require('../middleware/auth');
 
 const router = express.Router();
 
-// Initialize OpenAI
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-});
+// Initialize OpenAI (only if API key is available)
+let openai = null;
+if (process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY !== 'your-openai-api-key-here') {
+  openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY
+  });
+}
 
 // AI Chat endpoint
 router.post('/chat', authMiddleware, async (req, res) => {
@@ -18,8 +21,8 @@ router.post('/chat', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'Messages array is required' });
     }
 
-    if (!process.env.OPENAI_API_KEY) {
-      return res.status(500).json({ error: 'OpenAI API key not configured' });
+    if (!openai) {
+      return res.status(503).json({ error: 'OpenAI API key not configured' });
     }
 
     const completion = await openai.chat.completions.create({
@@ -65,6 +68,10 @@ router.post('/generate-description', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'All project fields are required' });
     }
 
+    if (!openai) {
+      return res.status(503).json({ error: 'OpenAI API key not configured' });
+    }
+
     const prompt = `Generate a compelling and professional real estate project description based on the following key details. The tone should be enticing to potential investors on a real estate crowdfunding platform.
 
 - Project Title: ${projectTitle}
@@ -108,7 +115,7 @@ Highlight the key selling points and investment potential. Keep it to one or two
 // Health check for AI service
 router.get('/health', async (req, res) => {
   try {
-    if (!process.env.OPENAI_API_KEY) {
+    if (!openai) {
       return res.status(503).json({ 
         status: 'unavailable',
         message: 'OpenAI API key not configured' 
