@@ -1,88 +1,115 @@
-const mongoose = require('mongoose');
+const { DataTypes } = require('sequelize');
 const bcrypt = require('bcryptjs');
+const { sequelize } = require('../config/database');
 
-const userSchema = new mongoose.Schema({
+const User = sequelize.define('User', {
+  id: {
+    type: DataTypes.UUID,
+    defaultValue: DataTypes.UUIDV4,
+    primaryKey: true
+  },
   email: {
-    type: String,
-    required: true,
+    type: DataTypes.STRING,
+    allowNull: false,
     unique: true,
-    lowercase: true,
-    trim: true
+    validate: {
+      isEmail: true
+    }
   },
   password: {
-    type: String,
-    required: true,
-    minlength: 6
+    type: DataTypes.STRING,
+    allowNull: false,
+    validate: {
+      len: [6, 255]
+    }
   },
   name: {
-    type: String,
-    required: true,
-    trim: true
+    type: DataTypes.STRING,
+    allowNull: false,
+    validate: {
+      notEmpty: true
+    }
   },
   userType: {
-    type: String,
-    enum: ['investor', 'developer', 'admin'],
-    required: true
+    type: DataTypes.ENUM('investor', 'developer', 'admin'),
+    allowNull: false
   },
-  wallet: {
-    ngn: { type: Number, default: 0 },
-    usdt: { type: Number, default: 0 },
-    usdc: { type: Number, default: 0 }
+  walletNgn: {
+    type: DataTypes.DECIMAL(15, 2),
+    defaultValue: 0,
+    field: 'wallet_ngn'
+  },
+  walletUsdt: {
+    type: DataTypes.DECIMAL(15, 2),
+    defaultValue: 0,
+    field: 'wallet_usdt'
+  },
+  walletUsdc: {
+    type: DataTypes.DECIMAL(15, 2),
+    defaultValue: 0,
+    field: 'wallet_usdc'
   },
   kycStatus: {
-    type: String,
-    enum: ['Not Submitted', 'Pending', 'Verified', 'Rejected'],
-    default: 'Not Submitted'
+    type: DataTypes.ENUM('Not Submitted', 'Pending', 'Verified', 'Rejected'),
+    defaultValue: 'Not Submitted',
+    field: 'kyc_status'
   },
   twoFactorEnabled: {
-    type: Boolean,
-    default: false
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+    field: 'two_factor_enabled'
   },
-  companyProfile: {
-    name: String,
-    regNumber: String,
-    address: String,
-    website: String
+  companyName: {
+    type: DataTypes.STRING,
+    field: 'company_name'
   },
-  treasuryAddress: String,
-  walletAddress: String,
+  companyRegNumber: {
+    type: DataTypes.STRING,
+    field: 'company_reg_number'
+  },
+  companyAddress: {
+    type: DataTypes.TEXT,
+    field: 'company_address'
+  },
+  companyWebsite: {
+    type: DataTypes.STRING,
+    field: 'company_website'
+  },
+  treasuryAddress: {
+    type: DataTypes.STRING,
+    field: 'treasury_address'
+  },
+  walletAddress: {
+    type: DataTypes.STRING,
+    field: 'wallet_address'
+  },
   isActive: {
-    type: Boolean,
-    default: true
+    type: DataTypes.BOOLEAN,
+    defaultValue: true,
+    field: 'is_active'
   },
-  lastLogin: Date,
-  createdAt: {
-    type: Date,
-    default: Date.now
-  },
-  updatedAt: {
-    type: Date,
-    default: Date.now
+  lastLogin: {
+    type: DataTypes.DATE,
+    field: 'last_login'
+  }
+}, {
+  tableName: 'users',
+  timestamps: true,
+  createdAt: 'created_at',
+  updatedAt: 'updated_at',
+  hooks: {
+    beforeSave: async (user) => {
+      if (user.changed('password')) {
+        const salt = await bcrypt.genSalt(10);
+        user.password = await bcrypt.hash(user.password, salt);
+      }
+    }
   }
 });
 
-// Hash password before saving
-userSchema.pre('save', async function(next) {
-  if (!this.isModified('password')) return next();
-  
-  try {
-    const salt = await bcrypt.genSalt(10);
-    this.password = await bcrypt.hash(this.password, salt);
-    next();
-  } catch (error) {
-    next(error);
-  }
-});
-
-// Compare password method
-userSchema.methods.comparePassword = async function(candidatePassword) {
+// Instance method to compare password
+User.prototype.comparePassword = async function(candidatePassword) {
   return bcrypt.compare(candidatePassword, this.password);
 };
 
-// Update timestamp
-userSchema.pre('save', function(next) {
-  this.updatedAt = Date.now();
-  next();
-});
-
-module.exports = mongoose.model('User', userSchema);
+module.exports = User;

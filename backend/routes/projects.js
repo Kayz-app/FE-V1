@@ -1,6 +1,7 @@
 const express = require('express');
 const Project = require('../models/Project');
 const Portfolio = require('../models/Portfolio');
+const User = require('../models/User');
 const { authMiddleware, adminMiddleware, developerMiddleware } = require('../middleware/auth');
 
 const router = express.Router();
@@ -8,7 +9,14 @@ const router = express.Router();
 // Get all projects
 router.get('/', async (req, res) => {
   try {
-    const projects = await Project.find().populate('developerId', 'name email').sort({ createdAt: -1 });
+    const projects = await Project.findAll({
+      include: [{
+        model: User,
+        as: 'developer',
+        attributes: ['name', 'email']
+      }],
+      order: [['createdAt', 'DESC']]
+    });
     res.json(projects);
   } catch (error) {
     console.error('Get projects error:', error);
@@ -19,7 +27,13 @@ router.get('/', async (req, res) => {
 // Get project by ID
 router.get('/:id', async (req, res) => {
   try {
-    const project = await Project.findById(req.params.id).populate('developerId', 'name email');
+    const project = await Project.findByPk(req.params.id, {
+      include: [{
+        model: User,
+        as: 'developer',
+        attributes: ['name', 'email']
+      }]
+    });
     if (!project) {
       return res.status(404).json({ error: 'Project not found' });
     }
@@ -52,11 +66,11 @@ router.post('/', authMiddleware, developerMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'All required fields must be provided' });
     }
 
-    const project = new Project({
+    const project = await Project.create({
       title,
       tokenTicker: tokenTicker.toUpperCase(),
       tokenSupply,
-      developerId: req.user._id,
+      developerId: req.user.id,
       developerName: req.user.name,
       location,
       fundingGoal,
@@ -69,12 +83,17 @@ router.post('/', authMiddleware, developerMiddleware, async (req, res) => {
       status: 'pending'
     });
 
-    await project.save();
-    await project.populate('developerId', 'name email');
+    const projectWithDeveloper = await Project.findByPk(project.id, {
+      include: [{
+        model: User,
+        as: 'developer',
+        attributes: ['name', 'email']
+      }]
+    });
 
     res.status(201).json({
       message: 'Project created successfully',
-      project
+      project: projectWithDeveloper
     });
   } catch (error) {
     console.error('Create project error:', error);
@@ -85,22 +104,26 @@ router.post('/', authMiddleware, developerMiddleware, async (req, res) => {
 // Update project (developer or admin)
 router.put('/:id', authMiddleware, async (req, res) => {
   try {
-    const project = await Project.findById(req.params.id);
+    const project = await Project.findByPk(req.params.id);
     if (!project) {
       return res.status(404).json({ error: 'Project not found' });
     }
 
     // Check if user can update (developer owns project or is admin)
-    if (project.developerId.toString() !== req.user._id.toString() && req.user.userType !== 'admin') {
+    if (project.developerId !== req.user.id && req.user.userType !== 'admin') {
       return res.status(403).json({ error: 'Not authorized to update this project' });
     }
 
     const updateData = req.body;
-    const updatedProject = await Project.findByIdAndUpdate(
-      req.params.id,
-      updateData,
-      { new: true }
-    ).populate('developerId', 'name email');
+    await project.update(updateData);
+
+    const updatedProject = await Project.findByPk(project.id, {
+      include: [{
+        model: User,
+        as: 'developer',
+        attributes: ['name', 'email']
+      }]
+    });
 
     res.json({
       message: 'Project updated successfully',
@@ -121,19 +144,24 @@ router.put('/:id/status', authMiddleware, adminMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'Invalid status' });
     }
 
-    const project = await Project.findByIdAndUpdate(
-      req.params.id,
-      { status },
-      { new: true }
-    ).populate('developerId', 'name email');
-
+    const project = await Project.findByPk(req.params.id);
     if (!project) {
       return res.status(404).json({ error: 'Project not found' });
     }
 
+    await project.update({ status });
+
+    const updatedProject = await Project.findByPk(project.id, {
+      include: [{
+        model: User,
+        as: 'developer',
+        attributes: ['name', 'email']
+      }]
+    });
+
     res.json({
       message: 'Project status updated successfully',
-      project
+      project: updatedProject
     });
   } catch (error) {
     console.error('Update project status error:', error);
@@ -147,11 +175,19 @@ router.get('/portfolio/:userId', authMiddleware, async (req, res) => {
     const { userId } = req.params;
     
     // Check if user can access this portfolio
-    if (req.user._id.toString() !== userId && req.user.userType !== 'admin') {
+    if (req.user.id !== userId && req.user.userType !== 'admin') {
       return res.status(403).json({ error: 'Not authorized to access this portfolio' });
     }
 
-    const portfolio = await Portfolio.findOne({ userId }).populate('tokens.projectId');
+    const portfolio = await Portfolio.findOne({ 
+      where: { userId },
+      include: [{
+        model: Project,
+        as: 'project',
+        required: false
+      }]
+    });
+    
     res.json(portfolio || { tokens: [] });
   } catch (error) {
     console.error('Get portfolio error:', error);
@@ -168,11 +204,11 @@ router.post('/portfolio', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'All required fields must be provided' });
     }
 
-    let portfolio = await Portfolio.findOne({ userId: req.user._id });
+    let portfolio = await Portfolio.findOne({ where: { userId: req.user.id } });
     
     if (!portfolio) {
-      portfolio = new Portfolio({
-        userId: req.user._id,
+      portfolio = await Portfolio.create({
+        userId: req.user.id,
         tokens: []
       });
     }
@@ -182,14 +218,14 @@ router.post('/portfolio', authMiddleware, async (req, res) => {
       projectId,
       type,
       amount,
-      originalOwnerId: req.user._id,
-      ownerId: req.user._id,
+      originalOwnerId: req.user.id,
+      ownerId: req.user.id,
       purchasePrice,
       purchaseDate: new Date()
     };
 
-    portfolio.tokens.push(token);
-    await portfolio.save();
+    const updatedTokens = [...portfolio.tokens, token];
+    await portfolio.update({ tokens: updatedTokens });
 
     res.status(201).json({
       message: 'Token added to portfolio successfully',

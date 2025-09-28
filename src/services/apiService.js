@@ -1,19 +1,18 @@
-// API service for connecting to the backend
 const API_BASE_URL = 'http://localhost:3001/api';
 
 class ApiService {
   constructor() {
-    this.token = localStorage.getItem('authToken');
+    this.token = localStorage.getItem('token');
   }
 
   setToken(token) {
     this.token = token;
-    localStorage.setItem('authToken', token);
+    localStorage.setItem('token', token);
   }
 
   clearToken() {
     this.token = null;
-    localStorage.removeItem('authToken');
+    localStorage.removeItem('token');
   }
 
   async request(endpoint, options = {}) {
@@ -49,43 +48,22 @@ class ApiService {
   async register(userData) {
     return this.request('/auth/register', {
       method: 'POST',
-      body: JSON.stringify(userData),
+      body: JSON.stringify(userData)
     });
   }
 
-  async login(email, password) {
-    const response = await this.request('/auth/login', {
+  async login(credentials) {
+    return this.request('/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify(credentials)
     });
-    
-    if (response.token) {
-      this.setToken(response.token);
-    }
-    
-    return response;
   }
 
   async getCurrentUser() {
     return this.request('/auth/me');
   }
 
-  async updateProfile(profileData) {
-    return this.request('/auth/profile', {
-      method: 'PUT',
-      body: JSON.stringify(profileData),
-    });
-  }
-
-  async logout() {
-    const response = await this.request('/auth/logout', {
-      method: 'POST',
-    });
-    this.clearToken();
-    return response;
-  }
-
-  // Project endpoints
+  // Projects endpoints
   async getProjects() {
     return this.request('/projects');
   }
@@ -97,14 +75,105 @@ class ApiService {
   async createProject(projectData) {
     return this.request('/projects', {
       method: 'POST',
-      body: JSON.stringify(projectData),
+      body: JSON.stringify(projectData)
     });
   }
 
   async updateProject(id, projectData) {
     return this.request(`/projects/${id}`, {
       method: 'PUT',
-      body: JSON.stringify(projectData),
+      body: JSON.stringify(projectData)
+    });
+  }
+
+  async deleteProject(id) {
+    return this.request(`/projects/${id}`, {
+      method: 'DELETE'
+    });
+  }
+
+  // Portfolio endpoints
+  async getMyPortfolio() {
+    return this.request('/portfolios/me');
+  }
+
+  async getPortfolioByUser(userId) {
+    return this.request(`/portfolios/user/${userId}`);
+  }
+
+  async updatePortfolio(portfolioData) {
+    return this.request('/portfolios/me', {
+      method: 'PUT',
+      body: JSON.stringify(portfolioData)
+    });
+  }
+
+  async addTokenToPortfolio(tokenData) {
+    return this.request('/portfolios/me/tokens', {
+      method: 'POST',
+      body: JSON.stringify(tokenData)
+    });
+  }
+
+  async removeTokenFromPortfolio(tokenId) {
+    return this.request(`/portfolios/me/tokens/${tokenId}`, {
+      method: 'DELETE'
+    });
+  }
+
+  // Market endpoints
+  async getMarketListings() {
+    return this.request('/market');
+  }
+
+  async getMarketListing(id) {
+    return this.request(`/market/${id}`);
+  }
+
+  async createMarketListing(listingData) {
+    return this.request('/market', {
+      method: 'POST',
+      body: JSON.stringify(listingData)
+    });
+  }
+
+  async updateMarketListing(id, listingData) {
+    return this.request(`/market/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(listingData)
+    });
+  }
+
+  async buyTokenFromMarket(id, amount) {
+    return this.request(`/market/${id}/buy`, {
+      method: 'POST',
+      body: JSON.stringify({ amount })
+    });
+  }
+
+  async deleteMarketListing(id) {
+    return this.request(`/market/${id}`, {
+      method: 'DELETE'
+    });
+  }
+
+  async getMyMarketListings() {
+    return this.request('/market/user/me');
+  }
+
+  // User endpoints
+  async getUsers() {
+    return this.request('/users');
+  }
+
+  async getUser(id) {
+    return this.request(`/users/${id}`);
+  }
+
+  async updateUser(id, userData) {
+    return this.request(`/users/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(userData)
     });
   }
 
@@ -114,9 +183,9 @@ class ApiService {
     const config = {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${this.token}`,
+        'Authorization': `Bearer ${this.token}`
       },
-      body: formData,
+      body: formData
     };
 
     const response = await fetch(url, config);
@@ -133,96 +202,27 @@ class ApiService {
     return this.request('/kyc/documents');
   }
 
-  async getKycStatus() {
-    return this.request('/kyc/status');
-  }
-
-  // AI endpoints
-  async sendAiMessage(messages) {
-    return this.request('/ai/chat', {
-      method: 'POST',
-      body: JSON.stringify({ messages }),
-    });
-  }
-
-  async generateProjectDescription(projectData) {
-    return this.request('/ai/generate-description', {
-      method: 'POST',
-      body: JSON.stringify(projectData),
-    });
-  }
-
   // Wallet endpoints
   async getWalletBalance() {
     return this.request('/wallet/balance');
   }
 
-  async updateWalletBalance(balanceData) {
-    return this.request('/wallet/balance', {
-      method: 'PUT',
-      body: JSON.stringify(balanceData),
-    });
-  }
-
-  async deposit(amount, currency) {
+  async depositFunds(amount, currency) {
     return this.request('/wallet/deposit', {
       method: 'POST',
-      body: JSON.stringify({ amount, currency }),
+      body: JSON.stringify({ amount, currency })
     });
   }
 
-  async withdraw(amount, currency, address) {
+  async withdrawFunds(amount, currency) {
     return this.request('/wallet/withdraw', {
       method: 'POST',
-      body: JSON.stringify({ amount, currency, address }),
+      body: JSON.stringify({ amount, currency })
     });
-  }
-
-  // Admin endpoints
-  async getAdminDashboard() {
-    return this.request('/admin/dashboard');
-  }
-
-  async getUsers(page = 1, limit = 10) {
-    return this.request(`/admin/users?page=${page}&limit=${limit}`);
-  }
-
-  async getPendingProjects() {
-    return this.request('/admin/projects/pending');
-  }
-
-  async approveProject(id) {
-    return this.request(`/admin/projects/${id}/approve`, {
-      method: 'PUT',
-    });
-  }
-
-  async rejectProject(id, reason) {
-    return this.request(`/admin/projects/${id}/reject`, {
-      method: 'PUT',
-      body: JSON.stringify({ reason }),
-    });
-  }
-
-  async getComplianceData() {
-    return this.request('/admin/compliance');
-  }
-
-  async updateUserKyc(userId, kycStatus) {
-    return this.request(`/admin/users/${userId}/kyc`, {
-      method: 'PUT',
-      body: JSON.stringify({ kycStatus }),
-    });
-  }
-
-  async getAnalytics() {
-    return this.request('/admin/analytics');
-  }
-
-  // Health check
-  async healthCheck() {
-    return this.request('/health');
   }
 }
 
-export default new ApiService();
+// Create singleton instance
+const apiService = new ApiService();
+
+export default apiService;

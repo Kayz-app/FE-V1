@@ -20,25 +20,25 @@ router.post('/register', async (req, res) => {
     }
 
     // Check if user exists
-    const existingUser = await User.findOne({ email });
+    const existingUser = await User.findOne({ where: { email } });
     if (existingUser) {
       return res.status(400).json({ error: 'User already exists' });
     }
 
     // Create user
-    const user = new User({
+    const user = await User.create({
       email,
       password,
       name,
       userType,
-      wallet: { ngn: 0, usdt: 0, usdc: 0 }
+      walletNgn: 0,
+      walletUsdt: 0,
+      walletUsdc: 0
     });
-
-    await user.save();
 
     // Generate JWT
     const token = jwt.sign(
-      { userId: user._id, email: user.email },
+      { userId: user.id, email: user.email },
       process.env.JWT_SECRET,
       { expiresIn: '7d' }
     );
@@ -47,7 +47,7 @@ router.post('/register', async (req, res) => {
       message: 'User created successfully',
       token,
       user: {
-        id: user._id,
+        id: user.id,
         email: user.email,
         name: user.name,
         userType: user.userType,
@@ -70,7 +70,7 @@ router.post('/login', async (req, res) => {
     }
 
     // Find user
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ where: { email } });
     if (!user) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
@@ -82,12 +82,11 @@ router.post('/login', async (req, res) => {
     }
 
     // Update last login
-    user.lastLogin = new Date();
-    await user.save();
+    await user.update({ lastLogin: new Date() });
 
     // Generate JWT
     const token = jwt.sign(
-      { userId: user._id, email: user.email },
+      { userId: user.id, email: user.email },
       process.env.JWT_SECRET,
       { expiresIn: '7d' }
     );
@@ -96,13 +95,22 @@ router.post('/login', async (req, res) => {
       message: 'Login successful',
       token,
       user: {
-        id: user._id,
+        id: user.id,
         email: user.email,
         name: user.name,
         userType: user.userType,
         kycStatus: user.kycStatus,
-        wallet: user.wallet,
-        companyProfile: user.companyProfile,
+        wallet: {
+          ngn: user.walletNgn,
+          usdt: user.walletUsdt,
+          usdc: user.walletUsdc
+        },
+        companyProfile: {
+          name: user.companyName,
+          regNumber: user.companyRegNumber,
+          address: user.companyAddress,
+          website: user.companyWebsite
+        },
         treasuryAddress: user.treasuryAddress,
         twoFactorEnabled: user.twoFactorEnabled
       }
@@ -118,13 +126,22 @@ router.get('/me', authMiddleware, async (req, res) => {
   try {
     res.json({
       user: {
-        id: req.user._id,
+        id: req.user.id,
         email: req.user.email,
         name: req.user.name,
         userType: req.user.userType,
         kycStatus: req.user.kycStatus,
-        wallet: req.user.wallet,
-        companyProfile: req.user.companyProfile,
+        wallet: {
+          ngn: req.user.walletNgn,
+          usdt: req.user.walletUsdt,
+          usdc: req.user.walletUsdc
+        },
+        companyProfile: {
+          name: req.user.companyName,
+          regNumber: req.user.companyRegNumber,
+          address: req.user.companyAddress,
+          website: req.user.companyWebsite
+        },
         treasuryAddress: req.user.treasuryAddress,
         twoFactorEnabled: req.user.twoFactorEnabled,
         walletAddress: req.user.walletAddress
@@ -143,15 +160,16 @@ router.put('/profile', authMiddleware, async (req, res) => {
     
     const updateData = {};
     if (name) updateData.name = name;
-    if (companyProfile) updateData.companyProfile = companyProfile;
+    if (companyProfile) {
+      updateData.companyName = companyProfile.name;
+      updateData.companyRegNumber = companyProfile.regNumber;
+      updateData.companyAddress = companyProfile.address;
+      updateData.companyWebsite = companyProfile.website;
+    }
     if (treasuryAddress) updateData.treasuryAddress = treasuryAddress;
     if (walletAddress) updateData.walletAddress = walletAddress;
 
-    const user = await User.findByIdAndUpdate(
-      req.user._id,
-      updateData,
-      { new: true, select: '-password' }
-    );
+    const user = await req.user.update(updateData);
 
     res.json({
       message: 'Profile updated successfully',

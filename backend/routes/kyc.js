@@ -24,8 +24,8 @@ router.post('/upload', authMiddleware, upload.single('document'), handleUploadEr
       return res.status(400).json({ error: 'Invalid document type' });
     }
 
-    const kycDocument = new KycDocument({
-      userId: req.user._id,
+    const kycDocument = await KycDocument.create({
+      userId: req.user.id,
       documentType,
       fileName: req.file.originalname,
       filePath: req.file.path,
@@ -33,17 +33,15 @@ router.post('/upload', authMiddleware, upload.single('document'), handleUploadEr
       mimeType: req.file.mimetype
     });
 
-    await kycDocument.save();
-
     // Update user KYC status to pending if not already verified
     if (req.user.kycStatus === 'Not Submitted') {
-      await User.findByIdAndUpdate(req.user._id, { kycStatus: 'Pending' });
+      await req.user.update({ kycStatus: 'Pending' });
     }
 
     res.status(201).json({
       message: 'Document uploaded successfully',
       document: {
-        id: kycDocument._id,
+        id: kycDocument.id,
         documentType: kycDocument.documentType,
         fileName: kycDocument.fileName,
         status: kycDocument.status,
@@ -59,7 +57,10 @@ router.post('/upload', authMiddleware, upload.single('document'), handleUploadEr
 // Get user's KYC documents
 router.get('/documents', authMiddleware, async (req, res) => {
   try {
-    const documents = await KycDocument.find({ userId: req.user._id }).sort({ uploadedAt: -1 });
+    const documents = await KycDocument.findAll({
+      where: { userId: req.user.id },
+      order: [['uploadedAt', 'DESC']]
+    });
     res.json(documents);
   } catch (error) {
     console.error('Get KYC documents error:', error);
@@ -70,7 +71,9 @@ router.get('/documents', authMiddleware, async (req, res) => {
 // Get KYC status
 router.get('/status', authMiddleware, async (req, res) => {
   try {
-    const user = await User.findById(req.user._id).select('kycStatus');
+    const user = await User.findByPk(req.user.id, {
+      attributes: ['kycStatus']
+    });
     res.json({ kycStatus: user.kycStatus });
   } catch (error) {
     console.error('Get KYC status error:', error);
@@ -81,9 +84,15 @@ router.get('/status', authMiddleware, async (req, res) => {
 // Get all pending KYC documents (admin only)
 router.get('/pending', authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    const documents = await KycDocument.find({ status: 'pending' })
-      .populate('userId', 'name email userType')
-      .sort({ uploadedAt: -1 });
+    const documents = await KycDocument.findAll({
+      where: { status: 'pending' },
+      include: [{
+        model: User,
+        as: 'user',
+        attributes: ['name', 'email', 'userType']
+      }],
+      order: [['uploadedAt', 'DESC']]
+    });
     res.json(documents);
   } catch (error) {
     console.error('Get pending KYC documents error:', error);
@@ -94,22 +103,24 @@ router.get('/pending', authMiddleware, adminMiddleware, async (req, res) => {
 // Approve KYC document (admin only)
 router.put('/:id/approve', authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    const document = await KycDocument.findById(req.params.id);
+    const document = await KycDocument.findByPk(req.params.id);
     if (!document) {
       return res.status(404).json({ error: 'Document not found' });
     }
 
-    document.status = 'approved';
-    document.reviewedBy = req.user._id;
-    document.reviewedAt = new Date();
-    await document.save();
+    await document.update({
+      status: 'approved',
+      reviewedBy: req.user.id,
+      reviewedAt: new Date()
+    });
 
     // Check if all documents are approved and update user status
-    const userDocuments = await KycDocument.find({ userId: document.userId });
+    const userDocuments = await KycDocument.findAll({ where: { userId: document.userId } });
     const allApproved = userDocuments.every(doc => doc.status === 'approved');
     
     if (allApproved) {
-      await User.findByIdAndUpdate(document.userId, { kycStatus: 'Verified' });
+      const user = await User.findByPk(document.userId);
+      await user.update({ kycStatus: 'Verified' });
     }
 
     res.json({
@@ -127,19 +138,21 @@ router.put('/:id/reject', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const { rejectionReason } = req.body;
     
-    const document = await KycDocument.findById(req.params.id);
+    const document = await KycDocument.findByPk(req.params.id);
     if (!document) {
       return res.status(404).json({ error: 'Document not found' });
     }
 
-    document.status = 'rejected';
-    document.rejectionReason = rejectionReason;
-    document.reviewedBy = req.user._id;
-    document.reviewedAt = new Date();
-    await document.save();
+    await document.update({
+      status: 'rejected',
+      rejectionReason,
+      reviewedBy: req.user.id,
+      reviewedAt: new Date()
+    });
 
     // Update user KYC status to rejected
-    await User.findByIdAndUpdate(document.userId, { kycStatus: 'Rejected' });
+    const user = await User.findByPk(document.userId);
+    await user.update({ kycStatus: 'Rejected' });
 
     res.json({
       message: 'Document rejected successfully',
@@ -154,14 +167,20 @@ router.put('/:id/reject', authMiddleware, adminMiddleware, async (req, res) => {
 // Get KYC document by ID
 router.get('/:id', authMiddleware, async (req, res) => {
   try {
-    const document = await KycDocument.findById(req.params.id).populate('userId', 'name email');
+    const document = await KycDocument.findByPk(req.params.id, {
+      include: [{
+        model: User,
+        as: 'user',
+        attributes: ['name', 'email']
+      }]
+    });
     
     if (!document) {
       return res.status(404).json({ error: 'Document not found' });
     }
 
     // Check if user can access this document
-    if (document.userId._id.toString() !== req.user._id.toString() && req.user.userType !== 'admin') {
+    if (document.userId !== req.user.id && req.user.userType !== 'admin') {
       return res.status(403).json({ error: 'Not authorized to access this document' });
     }
 

@@ -1,4 +1,7 @@
  import React, { useState } from 'react';
+import { useData } from '../../../contexts/DataContext';
+import LoadingSpinner from '../../common/LoadingSpinner';
+import ErrorMessage from '../../common/ErrorMessage';
 
 // --- INLINED COMPONENTS, ICONS & HELPERS --- //
 
@@ -51,9 +54,29 @@ const formatCurrency = (amount) => {
     }).format(amount);
 };
 
-const InvestorMyTokens = ({ currentUser, projects, portfolios, onClaimApy, onListToken }) => {
+const InvestorMyTokens = ({ currentUser, onClaimApy, onListToken }) => {
+    const { projects, portfolios, loading, errors, fetchMyPortfolio, fetchProjects } = useData();
+
+    // Show loading state
+    if (loading.projects || loading.portfolios) {
+        return <LoadingSpinner text="Loading token data..." />;
+    }
+
+    // Show error state
+    if (errors.projects || errors.portfolios) {
+        return (
+            <ErrorMessage 
+                error={errors.projects || errors.portfolios} 
+                onRetry={() => {
+                    if (errors.projects) fetchProjects();
+                    if (errors.portfolios) fetchMyPortfolio();
+                }}
+            />
+        );
+    }
+
     if (!currentUser || !portfolios || !projects) {
-        return <div className="text-center p-8">Loading token data...</div>;
+        return <div className="text-center p-8">No data available</div>;
     }
     
     const userPortfolio = portfolios[currentUser.id] || { tokens: [] };

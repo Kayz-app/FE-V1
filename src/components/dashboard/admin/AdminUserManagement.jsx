@@ -1,6 +1,30 @@
 import React from 'react';
+import { useData } from '../../../contexts/DataContext';
+import LoadingSpinner from '../../common/LoadingSpinner';
+import ErrorMessage from '../../common/ErrorMessage';
 
-const AdminUserManagement = ({ users = {} }) => {
+const AdminUserManagement = () => {
+    const { users, loading, errors, fetchUsers } = useData();
+
+    // Show loading state
+    if (loading.users) {
+        return <LoadingSpinner text="Loading user data..." />;
+    }
+
+    // Show error state
+    if (errors.users) {
+        return (
+            <ErrorMessage 
+                error={errors.users} 
+                onRetry={fetchUsers}
+            />
+        );
+    }
+
+    if (!users || Object.keys(users).length === 0) {
+        return <div className="text-center p-8">No users found</div>;
+    }
+
     return (
         <div className="bg-white p-6 rounded-lg shadow-md">
             <h2 className="text-xl font-bold text-gray-800 mb-4">User Management</h2>

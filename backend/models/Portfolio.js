@@ -1,69 +1,53 @@
-const mongoose = require('mongoose');
+const { DataTypes } = require('sequelize');
+const { sequelize } = require('../config/database');
 
-const portfolioSchema = new mongoose.Schema({
+const Portfolio = sequelize.define('Portfolio', {
+  id: {
+    type: DataTypes.UUID,
+    defaultValue: DataTypes.UUIDV4,
+    primaryKey: true
+  },
   userId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
+    type: DataTypes.UUID,
+    allowNull: false,
+    references: {
+      model: 'users',
+      key: 'id'
+    },
+    field: 'user_id'
   },
-  tokens: [{
-    tokenId: {
-      type: String,
-      required: true
-    },
-    projectId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Project',
-      required: true
-    },
-    type: {
-      type: String,
-      enum: ['SECURITY', 'MARKET'],
-      required: true
-    },
-    amount: {
-      type: Number,
-      required: true,
-      min: 0
-    },
-    originalOwnerId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User'
-    },
-    ownerId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User'
-    },
-    status: {
-      type: String,
-      enum: ['held', 'listed', 'sold'],
-      default: 'held'
-    },
-    lastApyClaimDate: Date,
-    purchasePrice: Number,
-    purchaseDate: {
-      type: Date,
-      default: Date.now
+  tokens: {
+    type: DataTypes.JSON,
+    defaultValue: [],
+    validate: {
+      isValidTokens(value) {
+        if (!Array.isArray(value)) {
+          throw new Error('Tokens must be an array');
+        }
+        value.forEach(token => {
+          if (!token.tokenId || !token.projectId || !token.type || token.amount === undefined) {
+            throw new Error('Each token must have tokenId, projectId, type, and amount');
+          }
+          if (!['SECURITY', 'MARKET'].includes(token.type)) {
+            throw new Error('Token type must be SECURITY or MARKET');
+          }
+          if (!['held', 'listed', 'sold'].includes(token.status || 'held')) {
+            throw new Error('Token status must be held, listed, or sold');
+          }
+        });
+      }
     }
-  }],
+  },
   totalValue: {
-    type: Number,
-    default: 0
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now
-  },
-  updatedAt: {
-    type: Date,
-    default: Date.now
+    type: DataTypes.DECIMAL(15, 2),
+    defaultValue: 0,
+    field: 'total_value'
   }
+}, {
+  tableName: 'portfolios',
+  timestamps: true,
+  createdAt: 'created_at',
+  updatedAt: 'updated_at'
 });
 
-// Update timestamp
-portfolioSchema.pre('save', function(next) {
-  this.updatedAt = Date.now();
-  next();
-});
-
-module.exports = mongoose.model('Portfolio', portfolioSchema);
+module.exports = Portfolio;

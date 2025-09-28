@@ -1,4 +1,7 @@
 import React, { useMemo } from 'react';
+import { useData } from '../../../contexts/DataContext';
+import LoadingSpinner from '../../common/LoadingSpinner';
+import ErrorMessage from '../../common/ErrorMessage';
 
 // --- INLINED COMPONENTS, ICONS & HELPERS TO RESOLVE IMPORT ERRORS --- //
 
@@ -170,9 +173,29 @@ const AssetAllocationChart = ({ data }) => {
 
 // --- MAIN COMPONENT --- //
 
-const InvestorDashboardOverview = ({ currentUser, projects, portfolios }) => {
+const InvestorDashboardOverview = ({ currentUser }) => {
+    const { projects, portfolios, loading, errors, fetchMyPortfolio, fetchProjects } = useData();
+
+    // Show loading state
+    if (loading.projects || loading.portfolios) {
+        return <LoadingSpinner text="Loading dashboard data..." />;
+    }
+
+    // Show error state
+    if (errors.projects || errors.portfolios) {
+        return (
+            <ErrorMessage 
+                error={errors.projects || errors.portfolios} 
+                onRetry={() => {
+                    if (errors.projects) fetchProjects();
+                    if (errors.portfolios) fetchMyPortfolio();
+                }}
+            />
+        );
+    }
+
     if (!currentUser || !portfolios || !projects) {
-        return <div className="text-center p-8">Loading dashboard data...</div>;
+        return <div className="text-center p-8">No data available</div>;
     }
 
     const userPortfolio = portfolios[currentUser.id] || { tokens: [] };

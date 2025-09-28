@@ -1,102 +1,131 @@
-const mongoose = require('mongoose');
+const { DataTypes } = require('sequelize');
+const { sequelize } = require('../config/database');
 
-const projectSchema = new mongoose.Schema({
+const Project = sequelize.define('Project', {
+  id: {
+    type: DataTypes.UUID,
+    defaultValue: DataTypes.UUIDV4,
+    primaryKey: true
+  },
   title: {
-    type: String,
-    required: true,
-    trim: true
+    type: DataTypes.STRING,
+    allowNull: false,
+    validate: {
+      notEmpty: true
+    }
   },
   tokenTicker: {
-    type: String,
-    required: true,
-    uppercase: true,
-    maxlength: 3
+    type: DataTypes.STRING(3),
+    allowNull: false,
+    validate: {
+      isUppercase: true,
+      len: [1, 3]
+    },
+    field: 'token_ticker'
   },
   tokenSupply: {
-    type: Number,
-    required: true,
-    min: 1
+    type: DataTypes.BIGINT,
+    allowNull: false,
+    validate: {
+      min: 1
+    },
+    field: 'token_supply'
   },
   developerId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
+    type: DataTypes.UUID,
+    allowNull: false,
+    references: {
+      model: 'users',
+      key: 'id'
+    },
+    field: 'developer_id'
   },
   developerName: {
-    type: String,
-    required: true
+    type: DataTypes.STRING,
+    allowNull: false,
+    field: 'developer_name'
   },
   location: {
-    type: String,
-    required: true
+    type: DataTypes.STRING,
+    allowNull: false
   },
   fundingGoal: {
-    type: Number,
-    required: true,
-    min: 1
+    type: DataTypes.DECIMAL(15, 2),
+    allowNull: false,
+    validate: {
+      min: 1
+    },
+    field: 'funding_goal'
   },
   amountRaised: {
-    type: Number,
-    default: 0
+    type: DataTypes.DECIMAL(15, 2),
+    defaultValue: 0,
+    field: 'amount_raised'
   },
   apy: {
-    type: Number,
-    required: true,
-    min: 0,
-    max: 100
+    type: DataTypes.DECIMAL(5, 2),
+    allowNull: false,
+    validate: {
+      min: 0,
+      max: 100
+    }
   },
   term: {
-    type: Number,
-    required: true,
-    min: 1
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    validate: {
+      min: 1
+    }
   },
   startDate: {
-    type: Date,
-    default: Date.now
+    type: DataTypes.DATE,
+    defaultValue: DataTypes.NOW,
+    field: 'start_date'
   },
   description: {
-    type: String,
-    required: true
+    type: DataTypes.TEXT,
+    allowNull: false
   },
-  imageUrl: String,
-  images: [String],
+  imageUrl: {
+    type: DataTypes.STRING,
+    field: 'image_url'
+  },
+  images: {
+    type: DataTypes.JSON,
+    defaultValue: []
+  },
   status: {
-    type: String,
-    enum: ['pending', 'active', 'funded', 'completed', 'cancelled'],
-    default: 'pending'
+    type: DataTypes.ENUM('pending', 'active', 'funded', 'completed', 'cancelled'),
+    defaultValue: 'pending'
   },
   projectWalletBalance: {
-    type: Number,
-    default: 0
+    type: DataTypes.DECIMAL(15, 2),
+    defaultValue: 0,
+    field: 'project_wallet_balance'
   },
-  completionDate: Date,
+  completionDate: {
+    type: DataTypes.DATE,
+    field: 'completion_date'
+  },
   fundsWithdrawn: {
-    type: Boolean,
-    default: false
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+    field: 'funds_withdrawn'
   },
   contractAddress: {
-    type: String,
+    type: DataTypes.STRING,
     unique: true,
-    sparse: true
+    field: 'contract_address'
   },
   metadata: {
-    type: mongoose.Schema.Types.Mixed,
-    default: {}
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now
-  },
-  updatedAt: {
-    type: Date,
-    default: Date.now
+    type: DataTypes.JSON,
+    defaultValue: {}
   }
+}, {
+  tableName: 'projects',
+  timestamps: true,
+  createdAt: 'created_at',
+  updatedAt: 'updated_at'
 });
 
-// Update timestamp
-projectSchema.pre('save', function(next) {
-  this.updatedAt = Date.now();
-  next();
-});
-
-module.exports = mongoose.model('Project', projectSchema);
+module.exports = Project;

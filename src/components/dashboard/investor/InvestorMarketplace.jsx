@@ -1,4 +1,7 @@
  import React, { useState } from 'react';
+import { useData } from '../../../contexts/DataContext';
+import LoadingSpinner from '../../common/LoadingSpinner';
+import ErrorMessage from '../../common/ErrorMessage';
 
 // NOTE: The actual component files for PropertiesMarket, SecondaryMarket, and CurrencyExchange
 // must be created and imported for this to work in a real app.
@@ -15,15 +18,34 @@ const PropertiesMarket = (props) => <PlaceholderComponent title="Properties Mark
 const SecondaryMarket = (props) => <PlaceholderComponent title="Secondary Market" {...props} />;
 const CurrencyExchange = (props) => <PlaceholderComponent title="Currency Exchange" {...props} />;
 
-const InvestorMarketplace = ({ currentUser, marketListings, projects, onInvest }) => {
+const InvestorMarketplace = ({ currentUser, onInvest }) => {
+    const { marketListings, projects, loading, errors, fetchMarketListings, fetchProjects } = useData();
     const [activeTab, setActiveTab] = useState('Properties');
+
+    // Show loading state
+    if (loading.marketListings || loading.projects) {
+        return <LoadingSpinner text="Loading marketplace data..." />;
+    }
+
+    // Show error state
+    if (errors.marketListings || errors.projects) {
+        return (
+            <ErrorMessage 
+                error={errors.marketListings || errors.projects} 
+                onRetry={() => {
+                    if (errors.marketListings) fetchMarketListings();
+                    if (errors.projects) fetchProjects();
+                }}
+            />
+        );
+    }
     
     const renderTabContent = () => {
         switch(activeTab) {
             case 'Secondary Market':
-                return <SecondaryMarket currentUser={currentUser} marketListings={marketListings} projects={projects} />;
+                return <SecondaryMarket currentUser={currentUser} />;
             case 'Properties':
-                return <PropertiesMarket projects={projects} currentUser={currentUser} onInvest={onInvest} />;
+                return <PropertiesMarket currentUser={currentUser} onInvest={onInvest} />;
             case 'Currency Exchange':
                 return <CurrencyExchange currentUser={currentUser} />;
             default:

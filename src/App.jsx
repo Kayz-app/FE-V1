@@ -3,6 +3,7 @@
     import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { callAIAPI } from "./api/api.ai";
 import { useWeb3 } from './contexts/Web3Context';
+import { useData } from './contexts/DataContext';
 
 // --- MOCK DATA --- //
 // In a real application, this data would come from a secure backend and blockchain.
@@ -815,12 +816,29 @@ const LoginPage = ({ setPage, setCurrentUser, users }) => {
     );
 };
 
-const RegisterPage = ({ setPage }) => {
+const RegisterPage = ({ setPage, setCurrentUser }) => {
     const [accountType, setAccountType] = useState('investor');
+
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        const formData = new FormData(e.target);
+        const userData = {
+            id: Date.now(), // Simple ID generation
+            name: formData.get('fullName'),
+            email: formData.get('email'),
+            type: accountType,
+            balance: 0,
+            kycVerified: false,
+            twoFactorEnabled: false
+        };
+        
+        // Set the current user to trigger dashboard redirect
+        setCurrentUser(userData);
+    };
 
     return (
         <AuthPage title="Create a new account" setPage={setPage}>
-             <form className="space-y-6" onSubmit={(e) => e.preventDefault()}>
+             <form className="space-y-6" onSubmit={handleSubmit}>
                 <div>
                     <label className="block text-sm font-medium text-gray-700">Register as</label>
                     <div className="mt-1 grid grid-cols-2 gap-2">
@@ -852,19 +870,19 @@ const RegisterPage = ({ setPage }) => {
                 </div>
                 <div>
                     <label className="block text-sm font-medium text-gray-700">Full Name</label>
-                    <input type="text" required className="mt-1 appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm" />
+                    <input type="text" name="fullName" required className="mt-1 appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm" />
                 </div>
                 <div>
                     <label className="block text-sm font-medium text-gray-700">Email address</label>
-                    <input type="email" required className="mt-1 appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm" />
+                    <input type="email" name="email" required className="mt-1 appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm" />
                 </div>
                  <div>
                     <label className="block text-sm font-medium text-gray-700">Password</label>
-                    <input type="password" required className="mt-1 appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm" />
+                    <input type="password" name="password" required className="mt-1 appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm" />
                 </div>
                 <div>
                     <label className="block text-sm font-medium text-gray-700">Confirm Password</label>
-                    <input type="password" required className="mt-1 appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm" />
+                    <input type="password" name="confirmPassword" required className="mt-1 appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm" />
                 </div>
                  <div>
                     <button type="submit" className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700">Create Account</button>
@@ -1123,6 +1141,30 @@ const StatCard = ({ title, value, icon }) => (
         <div>
             <p className="text-sm text-gray-500">{title}</p>
             <p className="text-2xl font-bold text-gray-800">{value}</p>
+        </div>
+    </div>
+);
+
+const LoadingSpinner = ({ text = "Loading..." }) => (
+    <div className="flex flex-col items-center justify-center p-8">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+        <p className="mt-4 text-gray-600">{text}</p>
+    </div>
+);
+
+const ErrorMessage = ({ error, onRetry }) => (
+    <div className="flex flex-col items-center justify-center p-8">
+        <div className="text-red-600 text-center">
+            <p className="text-lg font-semibold mb-2">Something went wrong</p>
+            <p className="text-sm mb-4">{error}</p>
+            {onRetry && (
+                <button 
+                    onClick={onRetry}
+                    className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700"
+                >
+                    Try Again
+                </button>
+            )}
         </div>
     </div>
 );
@@ -1413,16 +1455,16 @@ const InvestorDashboard = ({ currentUser, projects, portfolios, marketListings, 
         const isKycVerified = currentUser.kycStatus === 'Verified';
 
         switch (activeItem) {
-            case 'Dashboard': return <InvestorDashboardOverview currentUser={currentUser} projects={projects} portfolios={portfolios} />;
-            case 'My Tokens': return <InvestorMyTokens currentUser={currentUser} projects={projects} portfolios={portfolios} onClaimApy={onClaimApy} onListToken={onListToken} />;
-            case 'Marketplace': return <InvestorMarketplace currentUser={currentUser} marketListings={marketListings} projects={projects} onInvest={onInvest} />;
+            case 'Dashboard': return <InvestorDashboardOverview currentUser={currentUser} />;
+            case 'My Tokens': return <InvestorMyTokens currentUser={currentUser} onClaimApy={onClaimApy} onListToken={onListToken} />;
+            case 'Marketplace': return <InvestorMarketplace currentUser={currentUser} onInvest={onInvest} />;
             case 'My Wallet': 
                 return isKycVerified 
                     ? <InvestorWallet currentUser={currentUser} /> 
                     : <KycRequired setActiveDashboardItem={setActiveItem} />;
             case 'Settings': return <InvestorSettings currentUser={currentUser} />;
             case 'Help & Support': return <HelpAndSupport currentUser={currentUser} />;
-            default: return <InvestorDashboardOverview currentUser={currentUser} projects={projects} portfolios={portfolios} />;
+            default: return <InvestorDashboardOverview currentUser={currentUser} />;
         }
     };
 
@@ -2813,7 +2855,7 @@ const DeveloperDashboard = ({ currentUser, projects, portfolios, marketListings,
         const developerMarketplaceOnInvest = () => alert("Developers are not permitted to invest in projects or purchase from the secondary market.");
 
         switch (activeItem) {
-            case 'Dashboard': return <DeveloperDashboardOverview currentUser={currentUser} projects={developerProjects} portfolios={portfolios} />;
+            case 'Dashboard': return <DeveloperDashboardOverview currentUser={currentUser} />;
             case 'My Projects':
                 const projectToManage = projects.find(p => p.id === managingProjectId);
                 if (projectToManage) {
@@ -2825,7 +2867,7 @@ const DeveloperDashboard = ({ currentUser, projects, portfolios, marketListings,
             case 'Operational Wallet': return <DeveloperWallet currentUser={currentUser} />;
             case 'Settings': return <DeveloperSettings currentUser={currentUser} />;
             case 'Help & Support': return <HelpAndSupport currentUser={currentUser} />;
-            default: return <DeveloperDashboardOverview currentUser={currentUser} projects={developerProjects} portfolios={portfolios} />;
+            default: return <DeveloperDashboardOverview currentUser={currentUser} />;
         }
     };
     
@@ -2841,13 +2883,39 @@ const DeveloperDashboard = ({ currentUser, projects, portfolios, marketListings,
     );
 };
 
-const DeveloperDashboardOverview = ({ currentUser, projects, portfolios }) => {
+const DeveloperDashboardOverview = ({ currentUser }) => {
+    const { projects, portfolios, loading, errors, fetchProjects, fetchMyPortfolio } = useData();
+
+    // Show loading state
+    if (loading.projects || loading.portfolios) {
+        return <LoadingSpinner text="Loading developer dashboard..." />;
+    }
+
+    // Show error state
+    if (errors.projects || errors.portfolios) {
+        return (
+            <ErrorMessage 
+                error={errors.projects || errors.portfolios} 
+                onRetry={() => {
+                    if (errors.projects) fetchProjects();
+                    if (errors.portfolios) fetchMyPortfolio();
+                }}
+            />
+        );
+    }
+
+    if (!currentUser || !projects || !portfolios) {
+        return <div className="text-center p-8">No data available</div>;
+    }
+
+    // Filter projects to only those belonging to the current developer
+    const developerProjects = projects.filter(p => p.developerId === currentUser.id);
     const stats = useMemo(() => {
-        const totalCapitalRaised = projects.reduce((sum, p) => sum + p.amountRaised, 0);
-        const activeProjects = projects.filter(p => p.status === 'active' || p.status === 'funded').length;
+        const totalCapitalRaised = developerProjects.reduce((sum, p) => sum + p.amountRaised, 0);
+        const activeProjects = developerProjects.filter(p => p.status === 'active' || p.status === 'funded').length;
         
         // Estimate unique investors in the developer's projects
-        const projectIds = new Set(projects.map(p => p.id));
+        const projectIds = new Set(developerProjects.map(p => p.id));
         const investorIds = new Set();
         Object.values(portfolios).forEach(portfolio => {
             portfolio.tokens.forEach(token => {
@@ -2866,11 +2934,11 @@ const DeveloperDashboardOverview = ({ currentUser, projects, portfolios }) => {
         }, 0);
 
         return { totalCapitalRaised, activeProjects, totalInvestors, upcomingPayout };
-    }, [projects, portfolios]);
+    }, [developerProjects, portfolios]);
 
     const cryptoBalance = currentUser.wallet.usdt + currentUser.wallet.usdc;
 
-    const liveProject = projects.find(p => p.status === 'active' && p.amountRaised < p.fundingGoal);
+    const liveProject = developerProjects.find(p => p.status === 'active' && p.amountRaised < p.fundingGoal);
 
     return (
         <div className="space-y-8">
@@ -2887,7 +2955,7 @@ const DeveloperDashboardOverview = ({ currentUser, projects, portfolios }) => {
                  <div className="bg-white p-6 rounded-lg shadow-md">
                     <h3 className="text-xl font-bold text-gray-800 mb-4">Projects Summary</h3>
                     <div className="space-y-4">
-                        {projects.length > 0 ? projects.map(project => {
+                        {developerProjects.length > 0 ? developerProjects.map(project => {
                             const progress = project.fundingGoal > 0 ? (project.amountRaised / project.fundingGoal) * 100 : 0;
                             return (
                                 <div key={project.id} className="border-b pb-4 last:border-b-0">
@@ -3877,7 +3945,7 @@ const AdminDashboard = ({ currentUser, projects, users, onLogout, totalBalance, 
         switch (activeItem) {
             case 'Dashboard': return <AdminDashboardOverview users={users} projects={projects} />;
             case 'Project Approvals': return <AdminProjectApprovals projects={projects} onUpdateProjectStatus={onUpdateProjectStatus} />;
-            case 'User Management': return <AdminUserManagement users={users} />;
+            case 'User Management': return <AdminUserManagement />;
             case 'Compliance': return <AdminCompliance users={users} />;
             case 'Settings': return <AdminSettings />;
             default: return <AdminDashboardOverview users={users} projects={projects} />;
@@ -4161,7 +4229,28 @@ const AdminProjectDetails = ({ project, onUpdateProjectStatus, onBack }) => {
     );
 };
 
-const AdminUserManagement = ({ users }) => {
+const AdminUserManagement = () => {
+    const { users, loading, errors, fetchUsers } = useData();
+
+    // Show loading state
+    if (loading.users) {
+        return <LoadingSpinner text="Loading user data..." />;
+    }
+
+    // Show error state
+    if (errors.users) {
+        return (
+            <ErrorMessage 
+                error={errors.users} 
+                onRetry={fetchUsers}
+            />
+        );
+    }
+
+    if (!users || Object.keys(users).length === 0) {
+        return <div className="text-center p-8">No users found</div>;
+    }
+
     return (
         <div className="bg-white p-6 rounded-lg shadow-md">
             <h2 className="text-xl font-bold text-gray-800 mb-4">User Management</h2>
@@ -4317,15 +4406,29 @@ export default function App() {
     // Web3 context
     const { isConnected, userAddress, web3Service } = useWeb3();
     
+    // Data context
+    const { 
+        projects, 
+        portfolios, 
+        marketListings, 
+        users, 
+        loading, 
+        errors,
+        refreshAll 
+    } = useData();
+    
     // State management
     const [page, setPage] = useState('landing'); // landing, login, register, forgotPassword, investorDashboard, etc.
     const [currentUser, setCurrentUser] = useState(null);
-    const [users, setUsers] = useState(initialUsers);
-    const [projects, setProjects] = useState(initialProjects);
-    const [portfolios, setPortfolios] = useState(initialPortfolios);
-    const [marketListings, setMarketListings] = useState(initialMarketListings);
 
     const USD_NGN_RATE = 1500;
+
+    // Refresh data when user logs in
+    useEffect(() => {
+        if (currentUser) {
+            refreshAll();
+        }
+    }, [currentUser, refreshAll]);
 
     useEffect(() => {
         // --- Favicon Logic ---
@@ -4610,8 +4713,8 @@ export default function App() {
         if (currentUser) {
             switch (currentUser.type) {
                 case 'investor': return <InvestorDashboard currentUser={currentUser} projects={projects} portfolios={portfolios} marketListings={marketListings} onLogout={handleLogout} onClaimApy={handleClaimApy} onListToken={handleListToken} onInvest={handleInvest} totalBalance={totalBalance} />;
-                case 'developer': return <DeveloperDashboard currentUser={currentUser} projects={projects} portfolios={portfolios} marketListings={marketListings} onLogout={handleLogout} totalBalance={totalBalance} />;
-                case 'admin': return <AdminDashboard currentUser={currentUser} projects={projects} users={users} onLogout={handleLogout} totalBalance={totalBalance} onUpdateProjectStatus={handleUpdateProjectStatus} />;
+                case 'developer': return <DeveloperDashboard currentUser={currentUser} onLogout={handleLogout} totalBalance={totalBalance} />;
+                case 'admin': return <AdminDashboard currentUser={currentUser} onLogout={handleLogout} totalBalance={totalBalance} onUpdateProjectStatus={handleUpdateProjectStatus} />;
                 default:
                     // The useEffect above will handle logging out the user.
                     // Return null or a loading spinner to avoid rendering with an invalid user state.
@@ -4620,8 +4723,8 @@ export default function App() {
         }
 
         switch (page) {
-            case 'login': return <LoginPage setPage={setPage} setCurrentUser={setCurrentUser} users={users} />;
-            case 'register': return <RegisterPage setPage={setPage} />;
+            case 'login': return <LoginPage setPage={setPage} setCurrentUser={setCurrentUser} />;
+            case 'register': return <RegisterPage setPage={setPage} setCurrentUser={setCurrentUser} />;
             case 'forgotPassword': return <ForgotPasswordPage setPage={setPage} />;
             case 'company': return <CompanyPage setPage={setPage} />;
             case 'landing':

@@ -7,8 +7,17 @@ const router = express.Router();
 // Get wallet balance
 router.get('/balance', authMiddleware, async (req, res) => {
   try {
-    const user = await User.findById(req.user._id).select('wallet');
-    res.json({ balance: user.wallet });
+    const user = await User.findByPk(req.user.id, {
+      attributes: ['walletNgn', 'walletUsdt', 'walletUsdc']
+    });
+    
+    const balance = {
+      ngn: user.walletNgn,
+      usdt: user.walletUsdt,
+      usdc: user.walletUsdc
+    };
+    
+    res.json({ balance });
   } catch (error) {
     console.error('Get wallet balance error:', error);
     res.status(500).json({ error: 'Server error' });
@@ -21,19 +30,21 @@ router.put('/balance', authMiddleware, async (req, res) => {
     const { ngn, usdt, usdc } = req.body;
     
     const updateData = {};
-    if (typeof ngn === 'number') updateData['wallet.ngn'] = ngn;
-    if (typeof usdt === 'number') updateData['wallet.usdt'] = usdt;
-    if (typeof usdc === 'number') updateData['wallet.usdc'] = usdc;
+    if (typeof ngn === 'number') updateData.walletNgn = ngn;
+    if (typeof usdt === 'number') updateData.walletUsdt = usdt;
+    if (typeof usdc === 'number') updateData.walletUsdc = usdc;
 
-    const user = await User.findByIdAndUpdate(
-      req.user._id,
-      updateData,
-      { new: true }
-    ).select('wallet');
+    await req.user.update(updateData);
+
+    const balance = {
+      ngn: req.user.walletNgn,
+      usdt: req.user.walletUsdt,
+      usdc: req.user.walletUsdc
+    };
 
     res.json({
       message: 'Wallet balance updated successfully',
-      balance: user.wallet
+      balance
     });
   } catch (error) {
     console.error('Update wallet balance error:', error);
@@ -73,11 +84,12 @@ router.post('/deposit', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'Invalid currency' });
     }
 
-    const user = await User.findById(req.user._id);
-    const currentBalance = user.wallet[currency.toLowerCase()] || 0;
+    const user = await User.findByPk(req.user.id);
+    const currencyField = `wallet${currency.charAt(0).toUpperCase() + currency.slice(1)}`;
+    const currentBalance = user[currencyField] || 0;
     
-    await User.findByIdAndUpdate(req.user._id, {
-      [`wallet.${currency.toLowerCase()}`]: currentBalance + parseFloat(amount)
+    await user.update({
+      [currencyField]: currentBalance + parseFloat(amount)
     });
 
     res.json({
@@ -105,15 +117,16 @@ router.post('/withdraw', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'Invalid currency' });
     }
 
-    const user = await User.findById(req.user._id);
-    const currentBalance = user.wallet[currency.toLowerCase()] || 0;
+    const user = await User.findByPk(req.user.id);
+    const currencyField = `wallet${currency.charAt(0).toUpperCase() + currency.slice(1)}`;
+    const currentBalance = user[currencyField] || 0;
     
     if (currentBalance < parseFloat(amount)) {
       return res.status(400).json({ error: 'Insufficient balance' });
     }
 
-    await User.findByIdAndUpdate(req.user._id, {
-      [`wallet.${currency.toLowerCase()}`]: currentBalance - parseFloat(amount)
+    await user.update({
+      [currencyField]: currentBalance - parseFloat(amount)
     });
 
     res.json({

@@ -1,49 +1,76 @@
-const mongoose = require('mongoose');
+const { DataTypes } = require('sequelize');
+const { sequelize } = require('../config/database');
 
-const marketListingSchema = new mongoose.Schema({
+const MarketListing = sequelize.define('MarketListing', {
+  id: {
+    type: DataTypes.UUID,
+    defaultValue: DataTypes.UUIDV4,
+    primaryKey: true
+  },
   listingId: {
-    type: String,
-    required: true,
-    unique: true
+    type: DataTypes.STRING,
+    allowNull: false,
+    unique: true,
+    field: 'listing_id'
   },
   tokenId: {
-    type: String,
-    required: true
+    type: DataTypes.STRING,
+    allowNull: false,
+    field: 'token_id'
   },
   sellerId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
+    type: DataTypes.UUID,
+    allowNull: false,
+    references: {
+      model: 'users',
+      key: 'id'
+    },
+    field: 'seller_id'
   },
   projectId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Project',
-    required: true
+    type: DataTypes.UUID,
+    allowNull: false,
+    references: {
+      model: 'projects',
+      key: 'id'
+    },
+    field: 'project_id'
   },
   amount: {
-    type: Number,
-    required: true,
-    min: 0
+    type: DataTypes.DECIMAL(15, 2),
+    allowNull: false,
+    validate: {
+      min: 0
+    }
   },
   price: {
-    type: Number,
-    required: true,
-    min: 0
+    type: DataTypes.DECIMAL(15, 2),
+    allowNull: false,
+    validate: {
+      min: 0
+    }
   },
   status: {
-    type: String,
-    enum: ['active', 'sold', 'cancelled'],
-    default: 'active'
+    type: DataTypes.ENUM('active', 'sold', 'cancelled'),
+    defaultValue: 'active'
   },
-  createdAt: {
-    type: Date,
-    default: Date.now
+  soldAt: {
+    type: DataTypes.DATE,
+    field: 'sold_at'
   },
-  soldAt: Date,
   buyerId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User'
+    type: DataTypes.UUID,
+    references: {
+      model: 'users',
+      key: 'id'
+    },
+    field: 'buyer_id'
   }
+}, {
+  tableName: 'market_listings',
+  timestamps: true,
+  createdAt: 'created_at',
+  updatedAt: 'updated_at'
 });
 
-module.exports = mongoose.model('MarketListing', marketListingSchema);
+module.exports = MarketListing;

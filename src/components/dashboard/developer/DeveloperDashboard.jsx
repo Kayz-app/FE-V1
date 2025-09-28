@@ -1,4 +1,7 @@
  import React, { useState, useEffect } from 'react';
+import { useData } from '../../../contexts/DataContext';
+import LoadingSpinner from '../../common/LoadingSpinner';
+import ErrorMessage from '../../common/ErrorMessage';
 
 // --- INLINED ICONS & COMPONENTS --- //
 // In a real structured project, these would be imported.
@@ -38,9 +41,29 @@ const HelpAndSupport = (props) => <div>Help & Support Placeholder</div>;
 
 // --- END OF INLINED COMPONENTS --- //
 
-const DeveloperDashboard = ({ currentUser, projects = [], portfolios, marketListings, onLogout, totalBalance }) => {
+const DeveloperDashboard = ({ currentUser, onLogout, totalBalance }) => {
+    const { projects, portfolios, marketListings, loading, errors, fetchProjects, fetchMyPortfolio, fetchMarketListings } = useData();
     const [activeItem, setActiveItem] = useState('Dashboard');
     const [managingProjectId, setManagingProjectId] = useState(null);
+
+    // Show loading state
+    if (loading.projects || loading.portfolios || loading.marketListings) {
+        return <LoadingSpinner text="Loading developer dashboard..." />;
+    }
+
+    // Show error state
+    if (errors.projects || errors.portfolios || errors.marketListings) {
+        return (
+            <ErrorMessage 
+                error={errors.projects || errors.portfolios || errors.marketListings} 
+                onRetry={() => {
+                    if (errors.projects) fetchProjects();
+                    if (errors.portfolios) fetchMyPortfolio();
+                    if (errors.marketListings) fetchMarketListings();
+                }}
+            />
+        );
+    }
 
     // Add a guard clause to handle the loading state before data arrives.
     if (!currentUser) {

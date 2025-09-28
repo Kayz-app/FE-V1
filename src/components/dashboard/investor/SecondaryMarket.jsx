@@ -1,4 +1,7 @@
 import React from 'react';
+import { useData } from '../../../contexts/DataContext';
+import LoadingSpinner from '../../common/LoadingSpinner';
+import ErrorMessage from '../../common/ErrorMessage';
 
 // --- INLINED HELPERS --- //
 const formatCurrency = (amount) => {
@@ -10,9 +13,30 @@ const formatCurrency = (amount) => {
     }).format(amount);
 };
 
-const SecondaryMarket = ({ currentUser, marketListings, projects, users }) => {
+const SecondaryMarket = ({ currentUser }) => {
+    const { marketListings, projects, users, loading, errors, fetchMarketListings, fetchProjects, fetchUsers } = useData();
+
+    // Show loading state
+    if (loading.marketListings || loading.projects || loading.users) {
+        return <LoadingSpinner text="Loading market data..." />;
+    }
+
+    // Show error state
+    if (errors.marketListings || errors.projects || errors.users) {
+        return (
+            <ErrorMessage 
+                error={errors.marketListings || errors.projects || errors.users} 
+                onRetry={() => {
+                    if (errors.marketListings) fetchMarketListings();
+                    if (errors.projects) fetchProjects();
+                    if (errors.users) fetchUsers();
+                }}
+            />
+        );
+    }
+
     if (!currentUser || !marketListings || !projects || !users) {
-        return <div className="text-center p-8">Loading market data...</div>;
+        return <div className="text-center p-8">No data available</div>;
     }
 
     const camouflageName = (fullName) => {

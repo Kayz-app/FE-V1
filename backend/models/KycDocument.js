@@ -1,41 +1,72 @@
-const mongoose = require('mongoose');
+const { DataTypes } = require('sequelize');
+const { sequelize } = require('../config/database');
 
-const kycDocumentSchema = new mongoose.Schema({
+const KycDocument = sequelize.define('KycDocument', {
+  id: {
+    type: DataTypes.UUID,
+    defaultValue: DataTypes.UUIDV4,
+    primaryKey: true
+  },
   userId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
+    type: DataTypes.UUID,
+    allowNull: false,
+    references: {
+      model: 'users',
+      key: 'id'
+    },
+    field: 'user_id'
   },
   documentType: {
-    type: String,
-    enum: ['passport', 'drivers_license', 'national_id', 'utility_bill', 'bank_statement', 'company_registration'],
-    required: true
+    type: DataTypes.ENUM('passport', 'drivers_license', 'national_id', 'utility_bill', 'bank_statement', 'company_registration'),
+    allowNull: false,
+    field: 'document_type'
   },
   fileName: {
-    type: String,
-    required: true
+    type: DataTypes.STRING,
+    allowNull: false,
+    field: 'file_name'
   },
   filePath: {
-    type: String,
-    required: true
+    type: DataTypes.STRING,
+    allowNull: false,
+    field: 'file_path'
   },
-  fileSize: Number,
-  mimeType: String,
+  fileSize: {
+    type: DataTypes.BIGINT,
+    field: 'file_size'
+  },
+  mimeType: {
+    type: DataTypes.STRING,
+    field: 'mime_type'
+  },
   status: {
-    type: String,
-    enum: ['pending', 'approved', 'rejected'],
-    default: 'pending'
+    type: DataTypes.ENUM('pending', 'approved', 'rejected'),
+    defaultValue: 'pending'
   },
-  rejectionReason: String,
+  rejectionReason: {
+    type: DataTypes.TEXT,
+    field: 'rejection_reason'
+  },
   reviewedBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User'
+    type: DataTypes.UUID,
+    references: {
+      model: 'users',
+      key: 'id'
+    },
+    field: 'reviewed_by'
   },
-  reviewedAt: Date,
+  reviewedAt: {
+    type: DataTypes.DATE,
+    field: 'reviewed_at'
+  },
   uploadedAt: {
-    type: Date,
-    default: Date.now
+    type: DataTypes.DATE,
+    defaultValue: DataTypes.NOW,
+    field: 'uploaded_at'
   }
+}, {
+  tableName: 'kyc_documents',
+  timestamps: false // We're using uploadedAt instead
 });
 
-module.exports = mongoose.model('KycDocument', kycDocumentSchema);
+module.exports = KycDocument;

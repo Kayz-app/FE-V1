@@ -34,27 +34,125 @@ const AuthPage = ({ children, title, setPage }) => {
 };
 
 
-const LoginPage = ({ setPage, setCurrentUser, users }) => {
+const LoginPage = ({ setPage, setCurrentUser }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
+    const [loading, setLoading] = useState(false);
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
         setError('');
-        const user = Object.values(users).find(u => u.email === email);
-        if (user && user.password === password) {
-            setCurrentUser(user);
-        } else {
-            setError('Invalid email or password.');
+        setLoading(true);
+
+        try {
+            const response = await fetch('http://localhost:3001/api/auth/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ email, password })
+            });
+
+            const data = await response.json();
+            console.log('Login response:', { response: response.ok, data });
+
+            if (response.ok) {
+                // Store token and user data
+                localStorage.setItem('token', data.token);
+                localStorage.setItem('user', JSON.stringify(data.user));
+                
+                // Set current user and redirect to dashboard
+                const userData = {
+                    ...data.user,
+                    type: data.user.userType // Map userType to type for consistency
+                };
+                console.log('Setting current user:', userData);
+                setCurrentUser(userData);
+                
+                // Redirect to dashboard based on user type
+                if (data.user.userType === 'investor') {
+                    console.log('Redirecting to investor dashboard');
+                    setPage('investorDashboard');
+                } else if (data.user.userType === 'developer') {
+                    console.log('Redirecting to developer dashboard');
+                    setPage('developerDashboard');
+                } else if (data.user.userType === 'admin') {
+                    console.log('Redirecting to admin dashboard');
+                    setPage('adminDashboard');
+                }
+            } else {
+                setError(data.error || 'Login failed');
+            }
+        } catch (error) {
+            console.error('Login error:', error);
+            setError('Network error. Please try again.');
+        } finally {
+            setLoading(false);
         }
     };
 
-    const loginAs = (userEmail) => {
-        const user = Object.values(users).find(u => u.email === userEmail);
+    const loginAs = async (userEmail) => {
+        setLoading(true);
+        setError('');
+        
+        // For demo purposes, use the mock data login
+        const demoUsers = {
+            'investor@demo.com': { 
+                id: 1, 
+                type: 'investor', 
+                name: 'Ada Lovelace', 
+                email: 'investor@demo.com', 
+                wallet: { ngn: 5000000, usdt: 1250.50, usdc: 800.25 },
+                kycStatus: 'Verified',
+                twoFactorEnabled: true,
+            },
+            'developer@demo.com': { 
+                id: 2, 
+                type: 'developer', 
+                name: 'Charles Babbage', 
+                email: 'developer@demo.com', 
+                wallet: { ngn: 1200000, usdt: 500, usdc: 100 },
+                companyProfile: {
+                    name: 'Babbage Constructions Ltd.',
+                    regNumber: 'RC123456',
+                    address: '1 Innovation Drive, Yaba, Lagos',
+                    website: 'https://babbageconstructions.com',
+                },
+                twoFactorEnabled: false,
+                treasuryAddress: '0x1234ABCD5678EFGH9101KLMN1213OPQR1415STUV',
+            },
+            'admin@demo.com': { 
+                id: 3, 
+                type: 'admin', 
+                name: 'Admin Grace Hopper', 
+                email: 'admin@demo.com', 
+                wallet: { ngn: 0, usdt: 0, usdc: 0 } 
+            },
+            'buyer@demo.com': { 
+                id: 4, 
+                type: 'investor', 
+                name: 'Alan Turing', 
+                email: 'buyer@demo.com', 
+                wallet: { ngn: 2500000, usdt: 750, usdc: 500 },
+                kycStatus: 'Not Submitted',
+                twoFactorEnabled: false,
+            }
+        };
+        
+        const user = demoUsers[userEmail];
         if (user) {
             setCurrentUser(user);
+            // Redirect based on user type
+            if (user.type === 'investor') {
+                setPage('investorDashboard');
+            } else if (user.type === 'developer') {
+                setPage('developerDashboard');
+            } else if (user.type === 'admin') {
+                setPage('adminDashboard');
+            }
         }
+        setLoading(false);
     };
     
     return (
@@ -79,7 +177,13 @@ const LoginPage = ({ setPage, setCurrentUser, users }) => {
                     </div>
                 </div>
                 <div>
-                    <button type="submit" className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">Sign in</button>
+                    <button 
+                        type="submit" 
+                        disabled={loading}
+                        className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        {loading ? 'Signing in...' : 'Sign in'}
+                    </button>
                 </div>
             </form>
              <div className="mt-6">

@@ -1,9 +1,13 @@
 const express = require('express');
-const mongoose = require('mongoose');
 const cors = require('cors');
 const helmet = require('helmet');
 const path = require('path');
 require('dotenv').config();
+
+// Import database configuration
+const { sequelize, testConnection } = require('./config/database');
+// Import models to initialize associations
+require('./models');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -24,6 +28,8 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/projects', require('./routes/projects'));
+app.use('/api/portfolios', require('./routes/portfolios'));
+app.use('/api/market', require('./routes/market'));
 app.use('/api/kyc', require('./routes/kyc'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/ai', require('./routes/ai'));
@@ -52,28 +58,33 @@ app.use((req, res) => {
   res.status(404).json({ error: 'Route not found' });
 });
 
-// Database connection
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/kayzera', {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
-.then(() => {
-  console.log('Connected to MongoDB');
-  startServer();
-})
-.catch((error) => {
-  console.error('MongoDB connection error:', error);
-  console.log('Starting server without MongoDB...');
-  startServer();
-});
-
-function startServer() {
-  app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-    console.log(`Health check: http://localhost:${PORT}/api/health`);
-    console.log(`Frontend: http://localhost:5173`);
-    console.log(`OpenAI API Key configured: ${process.env.OPENAI_API_KEY ? 'Yes' : 'No'}`);
-  });
+// Database connection and server startup
+async function startServer() {
+  try {
+    // Test PostgreSQL connection
+    const isConnected = await testConnection();
+    
+    if (isConnected) {
+      // Sync database models (create tables if they don't exist)
+      await sequelize.sync({ alter: true });
+      console.log('Database tables synchronized');
+    } else {
+      console.log('Starting server without database connection...');
+    }
+    
+    app.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+      console.log(`Health check: http://localhost:${PORT}/api/health`);
+      console.log(`Frontend: http://localhost:5173`);
+      console.log(`OpenAI API Key configured: ${process.env.OPENAI_API_KEY ? 'Yes' : 'No'}`);
+    });
+  } catch (error) {
+    console.error('Server startup error:', error);
+    process.exit(1);
+  }
 }
+
+// Start the server
+startServer();
 
 module.exports = app;
