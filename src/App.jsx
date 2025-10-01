@@ -42,7 +42,7 @@ const initialUsers = {
     email: 'buyer@demo.com', 
     password: 'password123', 
     wallet: { ngn: 2500000, usdt: 2000, usdc: 1500 },
-    kycStatus: 'Not Submitted',
+    kycStatus: 'Verified',
     twoFactorEnabled: false,
     isSuspended: false,
   },
@@ -1638,7 +1638,7 @@ const AssetAllocationChart = ({ data }) => {
 };
 
 
-const InvestorDashboard = ({ currentUser, projects, portfolios, marketListings, onLogout, onClaimApy, onListToken, onInvest, onRedeemPrincipal, totalBalance, activities, onExchange }) => {
+const InvestorDashboard = ({ currentUser, projects, portfolios, marketListings, onLogout, onClaimApy, onListToken, onInvest, onRedeemPrincipal, totalBalance, activities, onExchange, onBuyFromMarket }) => {
     const [activeItem, setActiveItem] = useState('Dashboard');
 
     const sidebarItems = [
@@ -1656,7 +1656,7 @@ const InvestorDashboard = ({ currentUser, projects, portfolios, marketListings, 
         switch (activeItem) {
             case 'Dashboard': return <InvestorDashboardOverview currentUser={currentUser} projects={projects} portfolios={portfolios} activities={activities} />;
             case 'My Tokens': return <InvestorMyTokens currentUser={currentUser} projects={projects} portfolios={portfolios} onClaimApy={onClaimApy} onListToken={onListToken} onRedeemPrincipal={onRedeemPrincipal} />;
-            case 'Marketplace': return <InvestorMarketplace currentUser={currentUser} marketListings={marketListings} projects={projects} onInvest={onInvest} onExchange={onExchange} />;
+            case 'Marketplace': return <InvestorMarketplace currentUser={currentUser} marketListings={marketListings} projects={projects} onInvest={onInvest} onExchange={onExchange} onBuyFromMarket={onBuyFromMarket} />;
             case 'My Wallet': 
                 return isKycVerified 
                     ? <InvestorWallet currentUser={currentUser} /> 
@@ -2219,13 +2219,30 @@ const ListTokenModal = ({ isOpen, onClose, token, project, onConfirmList, curren
 };
 
 
-const InvestorMarketplace = ({ currentUser, marketListings, projects, onInvest, onExchange }) => {
+const InvestorMarketplace = ({ currentUser, marketListings, projects, onInvest, onExchange, onBuyFromMarket }) => {
     const [activeTab, setActiveTab] = useState('Properties');
+    const [buyModalOpen, setBuyModalOpen] = useState(false);
+    const [listingToBuy, setListingToBuy] = useState(null);
+
+    const handleOpenBuyModal = (listing) => {
+        setListingToBuy(listing);
+        setBuyModalOpen(true);
+    };
+
+    const handleCloseBuyModal = () => {
+        setListingToBuy(null);
+        setBuyModalOpen(false);
+    };
+
+    const handleConfirmBuy = (listingId, amount) => {
+        onBuyFromMarket(listingId, amount);
+        handleCloseBuyModal();
+    };
     
     const renderTabContent = () => {
         switch(activeTab) {
             case 'Secondary Market':
-                return <SecondaryMarket currentUser={currentUser} marketListings={marketListings} projects={projects} />;
+                return <SecondaryMarket currentUser={currentUser} marketListings={marketListings} projects={projects} onOpenBuyModal={handleOpenBuyModal} />;
             case 'Properties':
                 return <PropertiesMarket projects={projects} currentUser={currentUser} onInvest={onInvest} />;
             case 'Currency Exchange':
@@ -2234,6 +2251,8 @@ const InvestorMarketplace = ({ currentUser, marketListings, projects, onInvest, 
                 return null;
         }
     };
+
+    const selectedProjectForModal = listingToBuy ? projects.find(p => p.id === listingToBuy.projectId) : null;
 
     return (
         <div>
@@ -2260,6 +2279,16 @@ const InvestorMarketplace = ({ currentUser, marketListings, projects, onInvest, 
                 </nav>
             </div>
             {renderTabContent()}
+            {buyModalOpen && listingToBuy && selectedProjectForModal && (
+                <BuyTokenModal
+                    isOpen={buyModalOpen}
+                    onClose={handleCloseBuyModal}
+                    listing={listingToBuy}
+                    project={selectedProjectForModal}
+                    currentUser={currentUser}
+                    onConfirmBuy={handleConfirmBuy}
+                />
+            )}
         </div>
     );
 };
@@ -2318,13 +2347,19 @@ const KycRequired = ({ setActiveDashboardItem }) => {
 };
 
 const InvestorSettings = ({ currentUser }) => {
-    const [activeTab, setActiveTab] = useState('KYC');
+    const [activeTab, setActiveTab] = useState('Profile');
 
     return (
         <div className="bg-white p-6 rounded-lg shadow-md max-w-4xl mx-auto">
             <h2 className="text-xl font-bold text-gray-800 mb-4">Settings</h2>
             <div className="mb-6 border-b border-gray-200">
                 <nav className="-mb-px flex flex-wrap space-x-2 sm:space-x-6" aria-label="Tabs">
+                    <button
+                        onClick={() => setActiveTab('Profile')}
+                        className={`${activeTab === 'Profile' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'} py-4 px-2 sm:px-4 border-b-2 font-medium text-sm`}
+                    >
+                        Profile
+                    </button>
                     <button
                         onClick={() => setActiveTab('KYC')}
                         className={`${activeTab === 'KYC' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'} py-4 px-2 sm:px-4 border-b-2 font-medium text-sm`}
@@ -2339,7 +2374,78 @@ const InvestorSettings = ({ currentUser }) => {
                     </button>
                 </nav>
             </div>
-            {activeTab === 'KYC' ? <InvestorKycSettings status={currentUser.kycStatus} /> : <TwoFactorAuthSettings enabled={currentUser.twoFactorEnabled} />}
+            {activeTab === 'Profile' && <InvestorProfileSettings currentUser={currentUser} />}
+            {activeTab === 'KYC' && <InvestorKycSettings status={currentUser.kycStatus} />}
+            {activeTab === '2FA' && <TwoFactorAuthSettings enabled={currentUser.twoFactorEnabled} />}
+        </div>
+    );
+};
+
+const InvestorProfileSettings = ({ currentUser }) => {
+    const [password, setPassword] = useState({
+        current: '',
+        new: '',
+        confirm: ''
+    });
+
+    const handlePasswordChange = (e) => {
+        const { name, value } = e.target;
+        setPassword(prev => ({...prev, [name]: value}));
+    }
+
+    const handlePasswordSubmit = (e) => {
+        e.preventDefault();
+        if (password.new !== password.confirm) {
+            alert('New passwords do not match.');
+            return;
+        }
+        if (!password.new) {
+            alert('New password cannot be empty.');
+            return;
+        }
+        // In a real app, call API to update password
+        alert('Password updated successfully!');
+        setPassword({ current: '', new: '', confirm: '' });
+    }
+
+    return (
+        <div className="space-y-8">
+            <div>
+                <h3 className="text-lg font-bold text-gray-800 mb-4">Personal Information</h3>
+                <div className="space-y-4">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700">Full Name</label>
+                        <input type="text" name="name" value={currentUser.name} disabled className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 bg-gray-100 cursor-not-allowed"/>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700">Email Address</label>
+                        <input type="email" name="email" value={currentUser.email} disabled className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 bg-gray-100 cursor-not-allowed"/>
+                    </div>
+                </div>
+            </div>
+
+            <hr />
+
+            <form onSubmit={handlePasswordSubmit}>
+                 <h3 className="text-lg font-bold text-gray-800 mb-4">Change Password</h3>
+                 <div className="space-y-4">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700">Current Password</label>
+                        <input type="password" name="current" value={password.current} onChange={handlePasswordChange} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3" autoComplete="current-password"/>
+                    </div>
+                     <div>
+                        <label className="block text-sm font-medium text-gray-700">New Password</label>
+                        <input type="password" name="new" value={password.new} onChange={handlePasswordChange} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3" autoComplete="new-password"/>
+                    </div>
+                     <div>
+                        <label className="block text-sm font-medium text-gray-700">Confirm New Password</label>
+                        <input type="password" name="confirm" value={password.confirm} onChange={handlePasswordChange} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3" autoComplete="new-password"/>
+                    </div>
+                 </div>
+                 <div className="flex justify-end pt-4">
+                    <button type="submit" className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700">Update Password</button>
+                </div>
+            </form>
         </div>
     );
 };
@@ -2767,7 +2873,7 @@ const FiatWallet = ({ wallet }) => {
 };
 
 
-const SecondaryMarket = ({ currentUser, marketListings, projects }) => {
+const SecondaryMarket = ({ currentUser, marketListings, projects, onOpenBuyModal }) => {
     const camouflageName = (fullName) => {
         if (!fullName || typeof fullName !== 'string') return '*****';
         const parts = fullName.trim().split(' ');
@@ -2809,6 +2915,7 @@ const SecondaryMarket = ({ currentUser, marketListings, projects }) => {
                                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{camouflageName(sellerName)}</td>
                                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                          <button
+                                            onClick={() => onOpenBuyModal(listing)}
                                             disabled={currentUser.id === listing.sellerId || currentUser.type === 'developer' || currentUser.kycStatus !== 'Verified'}
                                             className="bg-green-500 text-white px-4 py-1.5 rounded-md text-xs font-medium hover:bg-green-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
                                         >
@@ -2847,6 +2954,7 @@ const SecondaryMarket = ({ currentUser, marketListings, projects }) => {
                                 <span className="font-semibold text-gray-800">{listing.amount.toLocaleString()} {project?.tokenTicker}</span>
                             </div>
                              <button
+                                onClick={() => onOpenBuyModal(listing)}
                                 disabled={currentUser.id === listing.sellerId || currentUser.type === 'developer' || currentUser.kycStatus !== 'Verified'}
                                 className="w-full bg-green-500 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-green-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
                             >
@@ -2890,299 +2998,358 @@ const PropertiesMarket = ({ projects, currentUser, onInvest }) => {
     );
 };
 
+const BuyTokenModal = ({ isOpen, onClose, listing, project, currentUser, onConfirmBuy }) => {
+    const [amount, setAmount] = useState('');
+    const [error, setError] = useState('');
+    const [step, setStep] = useState('input');
+
+    const stablecoinBalance = (currentUser.wallet.usdt || 0) + (currentUser.wallet.usdc || 0);
+    const pricePerToken = listing.price / listing.amount;
+    const numericAmount = parseFloat(amount) || 0;
+    const subtotal = numericAmount * pricePerToken;
+    const fee = subtotal * 0.015; // Assuming 1.5% fee for buyer as well
+    const totalCost = subtotal + fee;
+
+    useEffect(() => {
+        if (!isOpen) {
+            setTimeout(() => {
+                setAmount('');
+                setError('');
+                setStep('input');
+            }, 300);
+        }
+    }, [isOpen]);
+
+    const handleAmountChange = (value) => {
+        setError('');
+        if (value > listing.amount) {
+            setError(`Cannot buy more than the ${listing.amount.toLocaleString()} tokens available.`);
+        } else if ((parseFloat(value) * pricePerToken * 1.015) > stablecoinBalance) {
+            setError('Total cost exceeds your available stablecoin balance.');
+        }
+        setAmount(value);
+    };
+    
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        if (error || numericAmount <= 0) {
+            setError(error || 'Please enter a valid amount.');
+            return;
+        }
+        setStep('confirm');
+    };
+
+    const handleFinalConfirm = () => {
+        onConfirmBuy(listing.listingId, numericAmount);
+    };
+
+    if (!isOpen) return null;
+
+    return (
+        <WalletModal isOpen={isOpen} onClose={onClose} title={`Buy Token for ${project.title}`}>
+            {step === 'input' && (
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    <div>
+                        <p className="text-sm"><strong>Available Tokens:</strong> {listing.amount.toLocaleString()} {project.tokenTicker}</p>
+                        <p className="text-sm"><strong>Price / Token:</strong> {formatCurrency(pricePerToken)}</p>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700">Amount to Buy</label>
+                        <input
+                            type="number"
+                            value={amount}
+                            onChange={(e) => handleAmountChange(e.target.value)}
+                            max={listing.amount}
+                            placeholder="e.g., 500"
+                            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3"
+                        />
+                         {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
+                    </div>
+                    {numericAmount > 0 && (
+                        <div className="mt-4 text-sm space-y-2 bg-gray-50 p-3 rounded-md border">
+                            <div className="flex justify-between">
+                                <span className="text-gray-600">Subtotal:</span>
+                                <span className="font-medium text-gray-800">{formatCurrency(subtotal)}</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-gray-600">Platform Fee (1.5%):</span>
+                                <span className="font-medium text-gray-800">{formatCurrency(fee)}</span>
+                            </div>
+                            <div className="flex justify-between border-t pt-2 mt-2">
+                                <span className="font-bold text-gray-800">Total Cost:</span>
+                                <span className="font-bold text-gray-900">{formatCurrency(totalCost)}</span>
+                            </div>
+                        </div>
+                    )}
+                    <div className="text-right text-xs text-gray-500">
+                        Available Balance: {formatCurrency(stablecoinBalance)}
+                    </div>
+                    <div className="flex justify-end space-x-2 pt-2">
+                        <button type="button" onClick={onClose} className="bg-gray-200 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-300">Cancel</button>
+                        <button type="submit" disabled={!!error || numericAmount <= 0} className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 disabled:bg-gray-400">Review Purchase</button>
+                    </div>
+                </form>
+            )}
+             {step === 'confirm' && (
+                 <div>
+                    <h3 className="text-xl font-bold text-gray-900 mb-2">Confirm Purchase</h3>
+                    <p className="text-gray-600 mb-4">You are about to purchase tokens from the secondary market. Please review the details.</p>
+                    <div className="bg-gray-50 p-4 rounded-lg space-y-2 text-sm border">
+                        <div className="flex justify-between"><span className="text-gray-600">Amount to Buy:</span><span className="font-bold">{numericAmount.toLocaleString()} {project.tokenTicker}</span></div>
+                        <div className="flex justify-between border-t pt-2 mt-2"><span className="font-bold">Total Cost:</span><span className="font-bold">{formatCurrency(totalCost)}</span></div>
+                    </div>
+                    <div className="mt-6 flex justify-end space-x-3">
+                        <button onClick={() => setStep('input')} className="bg-gray-200 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-300">Back</button>
+                        <button onClick={handleFinalConfirm} className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700">Confirm & Buy</button>
+                    </div>
+                </div>
+            )}
+        </WalletModal>
+    );
+};
+
+
 const ProjectDetailsPage = ({ project, onBack, currentUser, onInvest }) => {
     const [mainImage, setMainImage] = useState(project.images[0]);
     const [investmentAmount, setInvestmentAmount] = useState('');
-    const [investmentError, setInvestmentError] = useState('');
-    const [isInvestmentModalOpen, setInvestmentModalOpen] = useState(false);
-    const [isAiChatModalOpen, setIsAiChatModalOpen] = useState(false);
-    
-    const isKycVerified = currentUser.kycStatus === 'Verified';
-    const stablecoinBalance = (currentUser.wallet.usdt || 0) + (currentUser.wallet.usdc || 0);
-    const numericInvestmentAmount = parseFloat(investmentAmount.replace(/,/g, '')) || 0;
-    const pricePerToken = project.fundingGoal > 0 && project.tokenSupply > 0 ? project.fundingGoal / project.tokenSupply : 1;
-    const tokensToReceive = numericInvestmentAmount > 0 ? numericInvestmentAmount / pricePerToken : 0;
-    const fee = numericInvestmentAmount * 0.015;
-    const totalDebit = numericInvestmentAmount + fee;
+    const [error, setError] = useState('');
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [investmentDetails, setInvestmentDetails] = useState(null);
+    const [activeTab, setActiveTab] = useState('Overview');
+    const [aiQuery, setAiQuery] = useState('');
+    const [aiResponse, setAiResponse] = useState('');
+    const [isAiLoading, setIsAiLoading] = useState(false);
+
+
+    const stablecoinBalance = currentUser ? (currentUser.wallet.usdt || 0) + (currentUser.wallet.usdc || 0) : 0;
     const progress = (project.amountRaised / project.fundingGoal) * 100;
-    
-    const isDeveloper = currentUser && currentUser.type === 'developer';
-    const isFunded = project.status === 'funded';
-    const isButtonDisabled = isFunded || isDeveloper || !isKycVerified || numericInvestmentAmount <= 0 || !!investmentError;
 
-    const handleAmountChange = (e) => {
-        setInvestmentError('');
+    const handleInvestmentChange = (e) => {
         const value = e.target.value;
-        const numericString = value.replace(/[^0-9]/g, '');
-        const numericValue = parseInt(numericString, 10);
+        const numericValue = parseFloat(value.replace(/,/g, ''));
+        setError('');
 
-        if (isNaN(numericValue)) {
+        if (value === '') {
             setInvestmentAmount('');
             return;
         }
 
-        const currentTotalDebit = numericValue * 1.015;
-        if (currentTotalDebit > stablecoinBalance) {
-            setInvestmentError(`Total debit (including fee) exceeds your available balance of ${formatCurrency(stablecoinBalance)}.`);
+        if (!isNaN(numericValue)) {
+            const fee = numericValue * 0.015;
+            const totalDebit = numericValue + fee;
+            if (totalDebit > stablecoinBalance) {
+                setError('Investment amount exceeds your available stablecoin balance.');
+            }
+            setInvestmentAmount(numericValue.toLocaleString('en-US'));
         }
-        
-        setInvestmentAmount(numericValue > 0 ? numericValue.toLocaleString('en-US') : '');
     };
 
-    const handleConfirmInvest = () => {
-        onInvest(project.id, numericInvestmentAmount);
-    };
-
-    return (
-        <div>
-            <button onClick={onBack} className="inline-flex items-center text-sm font-medium text-gray-600 hover:text-gray-900 mb-6">
-                <ArrowLeftIcon className="w-4 h-4 mr-2" />
-                Back to Properties
-            </button>
-            
-            <div className="bg-white rounded-lg shadow-xl overflow-hidden">
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
-                    <div className="p-4 md:p-6">
-                        <img src={mainImage} alt="Main project view" className="w-full h-96 object-cover rounded-lg shadow-md"/>
-                        <div className="flex space-x-2 mt-4">
-                            {project.images.map((img, index) => (
-                                <img 
-                                    key={index}
-                                    src={img} 
-                                    alt={`Thumbnail ${index + 1}`}
-                                    className={`w-20 h-20 object-cover rounded-md cursor-pointer border-2 transition-all ${mainImage === img ? 'border-indigo-500' : 'border-transparent hover:border-gray-300'}`}
-                                    onClick={() => setMainImage(img)}
-                                />
-                            ))}
-                        </div>
-                    </div>
-                    
-                    <div className="p-4 md:p-6 flex flex-col">
-                         <div className="flex-grow">
-                            <p className="text-sm font-semibold text-indigo-600 uppercase tracking-wide">{project.location}</p>
-                            <h1 className="mt-1 text-3xl font-bold text-gray-900">{project.title} ({project.tokenTicker})</h1>
-                            <p className="mt-4 text-gray-600 text-base">{project.description}</p>
-                            
-                            <div className="mt-6 grid grid-cols-2 gap-y-4 gap-x-2 text-sm text-gray-800 bg-gray-50 p-4 rounded-lg">
-                                <div className="flex items-center font-semibold"><TrendingUpIcon className="w-5 h-5 mr-2 text-indigo-500"/>APY:<span className="ml-auto font-bold text-lg text-green-600">{project.apy}%</span></div>
-                                <div className="flex items-center font-semibold"><ClockIcon className="w-5 h-5 mr-2 text-indigo-500"/>Term:<span className="ml-auto">{project.term} Months</span></div>
-                                <div className="flex items-center font-semibold"><UserIcon className="w-5 h-5 mr-2 text-indigo-500"/>Developer:<span className="ml-auto">{project.developerName}</span></div>
-                                <div className="flex items-center font-semibold"><CheckCircleIcon className="w-5 h-5 mr-2 text-indigo-500"/>Status:<span className="ml-auto capitalize">{project.status}</span></div>
-                            </div>
-                        </div>
-
-                         <div className="mt-8">
-                             <div className="w-full bg-gray-200 rounded-full h-2.5 mb-2">
-                                <div className="bg-green-500 h-2.5 rounded-full" style={{ width: `${progress}%` }}></div>
-                            </div>
-                             <div className="flex justify-between text-sm text-gray-600 mb-4">
-                                <span><strong>Raised:</strong> {formatCurrency(project.amountRaised)}</span>
-                                <span><strong>Goal:</strong> {formatCurrency(project.fundingGoal)}</span>
-                            </div>
-
-                             <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-200">
-                                 <h3 className="font-bold text-lg text-gray-800">Invest in this Project</h3>
-                                 <div className="mt-4">
-                                    <input 
-                                        type="text"
-                                        placeholder={isFunded ? "This project is fully funded" : "Enter amount (USD)"} 
-                                        value={investmentAmount}
-                                        onChange={handleAmountChange}
-                                        className={`w-full border rounded-md shadow-sm py-2 px-3 focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100 ${investmentError ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : 'border-gray-300'}`}
-                                        disabled={isFunded || isDeveloper}
-                                    />
-                                    {investmentError && <p className="text-red-500 text-xs mt-1">{investmentError}</p>}
-                                    <div className="mt-2 text-sm text-gray-500 text-right">
-                                        Available Balance: <strong>{formatCurrency(stablecoinBalance)}</strong>
-                                    </div>
-                                 </div>
-                                {investmentAmount > 0 && !isFunded && (
-                                    <div className="mt-4 text-sm space-y-2">
-                                        <div className="flex justify-between">
-                                            <span className="text-gray-600">Tokens to Receive:</span>
-                                            <span className="font-bold text-indigo-600">{tokensToReceive.toLocaleString(undefined, { maximumFractionDigits: 2 })} {project.tokenTicker}</span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                            <span className="text-gray-600">Investment Amount:</span>
-                                            <span className="font-medium text-gray-800">{formatCurrency(numericInvestmentAmount)}</span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                            <span className="text-gray-600">Platform Fee (1.5%):</span>
-                                            <span className="font-medium text-gray-800">{formatCurrency(fee)}</span>
-                                        </div>
-                                        <div className="flex justify-between border-t pt-2 mt-2">
-                                            <span className="font-bold text-gray-800">Total Debit:</span>
-                                            <span className="font-bold text-gray-900">{formatCurrency(totalDebit)}</span>
-                                        </div>
-                                    </div>
-                                )}
-                                 <div className="mt-4 space-y-2">
-                                     <button
-                                        onClick={() => setInvestmentModalOpen(true)}
-                                        disabled={isButtonDisabled}
-                                        className="w-full flex items-center justify-center bg-indigo-600 text-white px-6 py-3 rounded-md font-semibold hover:bg-indigo-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
-                                     >
-                                        <ZapIcon className="w-5 h-5 mr-2" />
-                                        {isKycVerified ? 'Invest Now' : 'Complete KYC to Invest'}
-                                     </button>
-                                     <button 
-                                        onClick={() => setIsAiChatModalOpen(true)}
-                                        className="w-full flex items-center justify-center bg-transparent text-indigo-600 px-6 py-2 rounded-md font-semibold hover:bg-indigo-50 border border-indigo-200 transition-colors"
-                                     >
-                                        <SparklesIcon className="w-5 h-5 mr-2" /> Ask AI about this Property
-                                     </button>
-                                 </div>
-                             </div>
-                         </div>
-                    </div>
-                </div>
-            </div>
-             <InvestmentModal 
-                isOpen={isInvestmentModalOpen}
-                onClose={() => setInvestmentModalOpen(false)}
-                onConfirm={handleConfirmInvest}
-                project={project}
-                details={{ numericInvestmentAmount, fee, totalDebit, tokensToReceive }}
-            />
-             <AIChatModal 
-                isOpen={isAiChatModalOpen}
-                onClose={() => setIsAiChatModalOpen(false)}
-                project={project}
-            />
-        </div>
-    );
-};
-
-const AIChatModal = ({ isOpen, onClose, project }) => {
-    const [messages, setMessages] = useState([]);
-    const [input, setInput] = useState('');
-    const [isLoading, setIsLoading] = useState(false);
-    const messagesEndRef = useRef(null);
-
-    const scrollToBottom = () => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    };
-
-    useEffect(() => {
-        scrollToBottom();
-    }, [messages]);
-    
-    useEffect(() => {
-        if(isOpen) {
-            // Reset state when modal opens
-            setMessages([{ 
-                sender: 'bot', 
-                text: `Hi! I'm your AI assistant. How can I help you with the "${project.title}" property today? You can ask about the location, investment potential, or market trends.` 
-            }]);
-            setInput('');
-            setIsLoading(false);
+    const handleInvestClick = () => {
+        const numericInvestmentAmount = parseFloat(investmentAmount.replace(/,/g, ''));
+        if (isNaN(numericInvestmentAmount) || numericInvestmentAmount <= 0) {
+            setError('Please enter a valid investment amount.');
+            return;
         }
-    }, [isOpen, project.title]);
 
-    const handleSendMessage = async (e) => {
+        const fee = numericInvestmentAmount * 0.015;
+        const totalDebit = numericInvestmentAmount + fee;
+        const pricePerToken = project.fundingGoal / project.tokenSupply;
+        const tokensToReceive = numericInvestmentAmount / pricePerToken;
+
+        setInvestmentDetails({
+            numericInvestmentAmount,
+            fee,
+            totalDebit,
+            tokensToReceive
+        });
+        setIsModalOpen(true);
+    };
+
+    const confirmInvestment = () => {
+        onInvest(project.id, investmentDetails.numericInvestmentAmount);
+        setIsModalOpen(false); // Modal will show success message and then close
+    };
+
+    const handleAiQuery = async (e) => {
         e.preventDefault();
-        if (!input.trim() || isLoading) return;
+        if (!aiQuery.trim()) return;
 
-        const userMessage = { sender: 'user', text: input };
-        setMessages(prev => [...prev, userMessage]);
-        setInput('');
-        setIsLoading(true);
-
+        setIsAiLoading(true);
+        setAiResponse('');
+        
         try {
-            const systemPrompt = `You are a helpful and knowledgeable real estate investment assistant for a platform called Kayzera. Your purpose is to answer user questions about a specific property to help them make an informed investment decision. You must be professional, encouraging, and base your answers on the provided context and grounded search results. Never give financial advice.
-
-            Here is the context for the current property:
-            - Title: ${project.title}
-            - Location: ${project.location}
+            const prompt = `As an AI investment assistant for Kayzera, answer the following user question about the "${project.title}" project.
+            
+            User Question: "${aiQuery}"
+            
+            Project Data:
             - Description: ${project.description}
+            - Location: ${project.location}
             - Funding Goal: ${formatCurrency(project.fundingGoal)}
             - APY: ${project.apy}%
             - Term: ${project.term} months
-            - Status: ${project.status}
-            `;
-
             
+            Provide a concise and helpful response based *only* on the provided data.`;
 
-            const responseText = await callAIAPI({ messages: [ { role: "system", content: systemPrompt }, { role: "user", content: input } ] });
-            const botMessage = { sender: 'bot', text: responseText };
-            setMessages(prev => [...prev, botMessage]);
-
+            const response = await callAIAPI(prompt);
+            setAiResponse(response);
         } catch (error) {
-            const errorMessage = { sender: 'bot', text: "I'm sorry, I encountered an error while trying to get a response. Please try again later." };
-            setMessages(prev => [...prev, errorMessage]);
+            setAiResponse('Sorry, I was unable to process your request at this time.');
         } finally {
-            setIsLoading(false);
+            setIsAiLoading(false);
         }
     };
-    
-    if (!isOpen) return null;
+
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center p-4">
-            <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl flex flex-col" style={{height: '80vh', maxHeight: '700px'}}>
-                <div className="p-4 border-b flex justify-between items-center bg-gray-50 rounded-t-lg">
-                    <div className="flex items-center">
-                         <SparklesIcon className="w-6 h-6 text-indigo-600 mr-3"/>
+        <>
+            <div className="max-w-6xl mx-auto">
+                <button onClick={onBack} className="inline-flex items-center text-sm font-medium text-gray-600 hover:text-gray-900 mb-6">
+                    <ArrowLeftIcon className="w-4 h-4 mr-2" />
+                    Back to Marketplace
+                </button>
+
+                <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
+                    {/* Left Column (Main Content) */}
+                    <div className="lg:col-span-3 space-y-8">
+                         {/* Image Gallery */}
                         <div>
-                             <h3 className="text-lg font-semibold text-gray-800">Ask AI about {project.title}</h3>
-                             <p className="text-xs text-green-600 flex items-center"><span className="h-2 w-2 bg-green-500 rounded-full mr-1.5"></span>Online</p>
+                             <img src={mainImage} alt="Main project view" className="w-full h-96 object-cover rounded-lg shadow-lg mb-4"/>
+                             <div className="flex space-x-2 overflow-x-auto pb-2">
+                                {project.images.map((img, index) => (
+                                    <img 
+                                        key={index}
+                                        src={img} 
+                                        alt={`Thumbnail ${index + 1}`}
+                                        className={`w-24 h-24 object-cover rounded-md cursor-pointer border-2 transition-all ${mainImage === img ? 'border-indigo-500 scale-105' : 'border-transparent hover:border-gray-300'}`}
+                                        onClick={() => setMainImage(img)}
+                                    />
+                                ))}
+                            </div>
+                        </div>
+                        
+                        {/* Tabs */}
+                        <div className="border-b">
+                             <nav className="-mb-px flex space-x-6" aria-label="Tabs">
+                                <button onClick={() => setActiveTab('Overview')} className={`${activeTab === 'Overview' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}>Overview</button>
+                                <button onClick={() => setActiveTab('AI_Assistant')} className={`${activeTab === 'AI_Assistant' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}>AI Assistant</button>
+                            </nav>
+                        </div>
+
+                        {/* Tab Content */}
+                        <div>
+                            {activeTab === 'Overview' && (
+                                <div className="space-y-6">
+                                    <h1 className="text-4xl font-extrabold text-gray-900">{project.title}</h1>
+                                    <p className="text-lg text-gray-600 leading-relaxed">{project.description}</p>
+                                </div>
+                            )}
+
+                            {activeTab === 'AI_Assistant' && (
+                                <div className="space-y-4">
+                                    <h2 className="text-2xl font-bold text-gray-800">AI Investment Assistant</h2>
+                                    <p className="text-gray-600">Ask a question about this project, and our AI will provide insights based on the available data.</p>
+                                    <form onSubmit={handleAiQuery} className="flex gap-2">
+                                        <input
+                                            type="text"
+                                            value={aiQuery}
+                                            onChange={(e) => setAiQuery(e.target.value)}
+                                            placeholder="e.g., What is the investment potential?"
+                                            className="flex-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+                                        />
+                                        <button type="submit" disabled={isAiLoading} className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300">
+                                            {isAiLoading ? 'Asking...' : 'Ask AI'}
+                                        </button>
+                                    </form>
+                                     {isAiLoading && <p className="text-sm text-gray-500">Thinking...</p>}
+                                     {aiResponse && (
+                                        <div className="mt-4 p-4 bg-gray-50 rounded-lg border">
+                                            <p className="text-gray-800">{aiResponse}</p>
+                                        </div>
+                                     )}
+                                </div>
+                            )}
                         </div>
                     </div>
-                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-200">
-                        <XIcon className="w-5 h-5" />
-                    </button>
-                </div>
-                <div className="flex-1 p-4 overflow-y-auto space-y-4 bg-gray-100">
-                    {messages.map((msg, index) => (
-                         <div key={index} className={`flex items-start gap-3 ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-                            {msg.sender === 'bot' && (
-                                <div className="w-8 h-8 rounded-full bg-indigo-500 text-white flex items-center justify-center flex-shrink-0">
-                                    <BotIcon className="w-5 h-5" />
+
+                    {/* Right Column (Investment Card) */}
+                     <div className="lg:col-span-2">
+                        <div className="sticky top-24 space-y-6">
+                            <div className="bg-white p-6 rounded-lg shadow-xl border">
+                                <h2 className="text-2xl font-bold text-gray-800 mb-4">Invest in this Project</h2>
+                                
+                                <div className="mb-4">
+                                    <div className="flex justify-between text-sm text-gray-600">
+                                        <span>Raised: {formatCurrency(project.amountRaised)}</span>
+                                        <span className="font-semibold">{progress.toFixed(1)}%</span>
+                                    </div>
+                                    <div className="w-full bg-gray-200 rounded-full h-2.5 mt-1">
+                                        <div className="bg-green-500 h-2.5 rounded-full" style={{ width: `${progress}%` }}></div>
+                                    </div>
                                 </div>
-                            )}
-                            <div className={`max-w-md lg:max-w-lg px-4 py-2 rounded-lg ${msg.sender === 'user' ? 'bg-indigo-500 text-white rounded-br-none' : 'bg-white text-gray-800 rounded-bl-none border'}`}>
-                               <p className="text-sm" dangerouslySetInnerHTML={{ __html: msg.text.replace(/\n/g, '<br />') }} />
-                            </div>
-                              {msg.sender === 'user' && (
-                                <div className="w-8 h-8 rounded-full bg-gray-200 text-gray-600 flex items-center justify-center flex-shrink-0">
-                                    <UserIcon className="w-5 h-5" />
+                                
+                                <div className="grid grid-cols-2 gap-4 text-center my-6">
+                                    <div>
+                                        <p className="text-sm text-gray-500">Annual APY</p>
+                                        <p className="text-2xl font-bold text-green-600">{project.apy}%</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-sm text-gray-500">Term</p>
+                                        <p className="text-2xl font-bold">{project.term} Months</p>
+                                    </div>
                                 </div>
-                            )}
-                         </div>
-                    ))}
-                    {isLoading && (
-                         <div className="flex items-start gap-3 justify-start">
-                             <div className="w-8 h-8 rounded-full bg-indigo-500 text-white flex items-center justify-center flex-shrink-0">
-                                <BotIcon className="w-5 h-5" />
-                            </div>
-                            <div className="max-w-md lg:max-w-lg px-4 py-3 rounded-lg bg-white text-gray-800 rounded-bl-none border">
-                               <div className="flex items-center space-x-1">
-                                  <span className="h-1.5 w-1.5 bg-gray-500 rounded-full animate-pulse [animation-delay:-0.3s]"></span>
-                                  <span className="h-1.5 w-1.5 bg-gray-500 rounded-full animate-pulse [animation-delay:-0.15s]"></span>
-                                  <span className="h-1.5 w-1.5 bg-gray-500 rounded-full animate-pulse"></span>
-                               </div>
+                                
+                                {progress < 100 ? (
+                                    <div className="space-y-4">
+                                        <div>
+                                            <label htmlFor="investment" className="block text-sm font-medium text-gray-700">Investment Amount (USD)</label>
+                                            <div className="mt-1 relative rounded-md shadow-sm">
+                                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                                    <span className="text-gray-500 sm:text-sm">$</span>
+                                                </div>
+                                                <input
+                                                    type="text"
+                                                    name="investment"
+                                                    id="investment"
+                                                    value={investmentAmount}
+                                                    onChange={handleInvestmentChange}
+                                                    className="focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-7 pr-12 sm:text-sm border-gray-300 rounded-md"
+                                                    placeholder="0.00"
+                                                    disabled={currentUser.type === 'developer' || currentUser.kycStatus !== 'Verified'}
+                                                />
+                                            </div>
+                                            <p className="mt-1 text-xs text-right text-gray-500">Available: {formatCurrency(stablecoinBalance)}</p>
+                                            {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
+                                        </div>
+                                        <button 
+                                            onClick={handleInvestClick}
+                                            disabled={!!error || !investmentAmount || currentUser.type === 'developer' || currentUser.kycStatus !== 'Verified'}
+                                            className="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-lg font-medium text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                                        >
+                                            {currentUser.kycStatus !== 'Verified' ? 'Verify KYC to Invest' : 'Invest Now'}
+                                        </button>
+                                         <p className="text-xs text-center text-gray-500">A 1.5% platform fee will be added to your investment.</p>
+                                    </div>
+                                ) : (
+                                    <div className="text-center py-4 bg-blue-50 rounded-lg">
+                                        <h3 className="text-lg font-bold text-blue-800">Project Fully Funded!</h3>
+                                        <p className="text-sm text-blue-700">Thank you to all our investors.</p>
+                                    </div>
+                                )}
                             </div>
                         </div>
-                    )}
-                    <div ref={messagesEndRef} />
-                </div>
-                <div className="p-4 bg-white border-t rounded-b-lg">
-                    <form onSubmit={handleSendMessage} className="flex items-center space-x-2">
-                        <input
-                            type="text"
-                            value={input}
-                            onChange={(e) => setInput(e.target.value)}
-                            placeholder="Ask a question..."
-                            className="flex-1 block w-full border-gray-300 rounded-full py-2 px-4 focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100"
-                            disabled={isLoading}
-                        />
-                        <button type="submit" className="bg-indigo-600 text-white p-2.5 rounded-full font-semibold hover:bg-indigo-700 disabled:bg-indigo-300" disabled={isLoading}>
-                            <SendIcon className="w-5 h-5" />
-                        </button>
-                    </form>
+                    </div>
                 </div>
             </div>
-        </div>
+
+            <InvestmentModal
+                isOpen={isModalOpen}
+                onClose={() => setIsModalOpen(false)}
+                onConfirm={confirmInvestment}
+                project={project}
+                details={investmentDetails}
+            />
+        </>
     );
 };
 
@@ -5209,6 +5376,9 @@ export default function App() {
             { id: 2, type: 'Funds Withdrawn', project: 'Lekki Pearl Residence', amount: 242500, date: '2025-09-10T11:00:00Z' },
             { id: 3, type: 'APY Wallet Deposit', project: 'Eko Atlantic Tower', amount: -12000, date: '2025-09-09T15:30:00Z' },
         ],
+        3: [ // Admin Grace Hopper's initial activities
+             { id: 1, type: 'Fee Collection', project: 'Lekki Pearl Residence', amount: 7500, date: '2025-09-10T11:00:00Z', description: '3% platform fee on capital withdrawal.'},
+        ],
         4: [], // Bayo Adekunle starts with no activities
     });
 
@@ -5484,31 +5654,31 @@ export default function App() {
             alert("Error: Project not found.");
             return;
         }
+        
+        const nextUsers = JSON.parse(JSON.stringify(users));
 
         // 1. Debit investor's wallet
-        const updatedUser = {
-            ...users[currentUser.email],
-            wallet: {
-                ...userWallet,
-                usdt: newUsdt,
-                usdc: newUsdc
-            }
-        };
+        const investor = nextUsers[currentUser.email];
+        investor.wallet.usdt = newUsdt;
+        investor.wallet.usdc = newUsdc;
 
-        setCurrentUser(updatedUser);
-        setUsers(prevUsers => ({
-            ...prevUsers,
-            [currentUser.email]: updatedUser
-        }));
+        // 2. Credit admin's wallet with the fee
+        const admin = nextUsers['admin@demo.com'];
+        if (admin) {
+            admin.wallet.usdt = (admin.wallet.usdt || 0) + fee;
+        }
 
-        // 2. Update project's amountRaised
+        setCurrentUser(investor);
+        setUsers(nextUsers);
+
+        // 3. Update project's amountRaised
         setProjects(prevProjects => prevProjects.map(p => 
             p.id === projectId 
             ? { ...p, amountRaised: p.amountRaised + amount, status: (p.amountRaised + amount) >= p.fundingGoal ? 'funded' : p.status } 
             : p
         ));
 
-        // 3. Create new tokens for the investor
+        // 4. Create new tokens for the investor
         setPortfolios(prevPortfolios => {
             const newPortfolios = JSON.parse(JSON.stringify(prevPortfolios));
             const userPortfolio = newPortfolios[currentUser.id] || { tokens: [] };
@@ -5536,9 +5706,177 @@ export default function App() {
         addActivity(currentUser.id, {
             type: 'Investment',
             project: project.title,
-            amount: -amount
+            amount: -totalDebit
         });
-        // alert(`Congratulations! Your investment of ${formatCurrency(amount)} was successful.`);
+
+        // 5. Log fee collection for admin
+        if(admin) {
+            addActivity(admin.id, {
+                type: 'Fee Collection',
+                project: project.title,
+                amount: fee,
+                description: `1.5% fee on investment from ${currentUser.name.split(' ')[0]}.`
+            });
+        }
+    };
+
+    const handleBuyFromMarket = (listingId, amountToBuy) => {
+        const listing = marketListings.find(l => l.listingId === listingId);
+        if (!listing) {
+            alert("Error: Listing not found.");
+            return;
+        }
+
+        const buyer = currentUser;
+        const seller = Object.values(users).find(u => u.id === listing.sellerId);
+
+        if (!buyer || !seller) {
+            alert("Error: Buyer or seller not found.");
+            return;
+        }
+        
+        const pricePerToken = listing.price / listing.amount;
+        const subtotal = pricePerToken * amountToBuy;
+        const buyerFee = subtotal * 0.015;
+        const totalDebit = subtotal + buyerFee;
+        const sellerFee = subtotal * 0.015;
+        const sellerNetCredit = subtotal - sellerFee;
+        const totalPlatformFee = buyerFee + sellerFee;
+
+        const buyerWallet = users[buyer.email].wallet;
+        const totalStablecoin = buyerWallet.usdt + buyerWallet.usdc;
+
+        if (totalStablecoin < totalDebit) {
+            alert("Insufficient stablecoin balance (USDT/USDC) to purchase this token.");
+            return;
+        }
+
+        // --- Perform Transaction ---
+
+        // 1. Update Wallets
+        let remainingDebit = totalDebit;
+        let buyerNewUsdt = buyerWallet.usdt;
+        let buyerNewUsdc = buyerWallet.usdc;
+
+        if (buyerNewUsdt >= remainingDebit) {
+            buyerNewUsdt -= remainingDebit;
+        } else {
+            remainingDebit -= buyerNewUsdt;
+            buyerNewUsdt = 0;
+            buyerNewUsdc -= remainingDebit;
+        }
+        
+        const updatedUsers = JSON.parse(JSON.stringify(users));
+        updatedUsers[buyer.email].wallet = { ...buyerWallet, usdt: buyerNewUsdt, usdc: buyerNewUsdc };
+        updatedUsers[seller.email].wallet.usdt += sellerNetCredit;
+
+        // Credit admin's wallet with total fees
+        const admin = updatedUsers['admin@demo.com'];
+        if (admin) {
+            admin.wallet.usdt = (admin.wallet.usdt || 0) + totalPlatformFee;
+        }
+
+        // 2. Update Portfolios
+        const updatedPortfolios = JSON.parse(JSON.stringify(portfolios));
+        const sellerPortfolio = updatedPortfolios[seller.id];
+        const buyerPortfolio = updatedPortfolios[buyer.id] || { tokens: [] };
+        
+        // Find and decrement seller's tokens
+        const sellerMarketToken = sellerPortfolio.tokens.find(t => t.tokenId === listing.tokenId);
+        const sellerSecurityToken = sellerPortfolio.tokens.find(t => t.projectId === listing.projectId && t.type === 'SECURITY');
+        
+        if (!sellerMarketToken || !sellerSecurityToken || sellerMarketToken.amount < amountToBuy) {
+            alert("Error processing transaction: Seller token balance is incorrect.");
+            return;
+        }
+        
+        sellerMarketToken.amount -= amountToBuy;
+        sellerSecurityToken.amount -= amountToBuy;
+        sellerMarketToken.status = sellerMarketToken.amount > 0 ? 'held' : 'sold'; // Or remove if 0
+
+        // Find or create buyer's tokens and increment
+        let buyerMarketToken = buyerPortfolio.tokens.find(t => t.projectId === listing.projectId && t.type === 'MARKET');
+        let buyerSecurityToken = buyerPortfolio.tokens.find(t => t.projectId === listing.projectId && t.type === 'SECURITY');
+        
+        if (buyerMarketToken) {
+            buyerMarketToken.amount += amountToBuy;
+        } else {
+            buyerMarketToken = {
+                tokenId: `proj${listing.projectId}-mkt-${buyer.id}`,
+                projectId: listing.projectId,
+                type: 'MARKET',
+                amount: amountToBuy,
+                ownerId: buyer.id,
+                status: 'held',
+            };
+            buyerPortfolio.tokens.push(buyerMarketToken);
+        }
+
+        if (buyerSecurityToken) {
+            buyerSecurityToken.amount += amountToBuy;
+        } else {
+            buyerSecurityToken = {
+                tokenId: `proj${listing.projectId}-sec-${buyer.id}`,
+                projectId: listing.projectId,
+                type: 'SECURITY',
+                amount: amountToBuy,
+                originalOwnerId: buyer.id,
+                lastApyClaimDate: new Date().toISOString(),
+            };
+            buyerPortfolio.tokens.push(buyerSecurityToken);
+        }
+        
+        updatedPortfolios[buyer.id] = buyerPortfolio;
+
+        // 3. Update Market Listings
+        const updatedMarketListings = marketListings.map(l => {
+            if (l.listingId === listingId) {
+                const newAmount = l.amount - amountToBuy;
+                if (newAmount > 0) {
+                    return {
+                        ...l,
+                        amount: newAmount,
+                        price: newAmount * pricePerToken
+                    };
+                }
+                return null; // Mark for removal
+            }
+            return l;
+        }).filter(Boolean); // Remove null entries
+        
+        // 4. Set State
+        setUsers(updatedUsers);
+        setPortfolios(updatedPortfolios);
+        setMarketListings(updatedMarketListings);
+        setCurrentUser(updatedUsers[buyer.email]); // Update current user with new balance
+
+        // 5. Add Activities
+        const project = projects.find(p => p.id === listing.projectId);
+        addActivity(buyer.id, {
+            type: 'Secondary Market Purchase',
+            project: project.title,
+            amount: -totalDebit,
+            description: `Bought ${amountToBuy.toLocaleString()} ${project.tokenTicker} tokens`
+        });
+        addActivity(seller.id, {
+            type: 'Secondary Market Sale',
+            project: project.title,
+            amount: sellerNetCredit,
+            description: `Sold ${amountToBuy.toLocaleString()} ${project.tokenTicker} tokens`
+        });
+        
+        // Log fee collection for admin
+        if(admin) {
+            addActivity(admin.id, {
+                type: 'Fee Collection',
+                project: project.title,
+                amount: totalPlatformFee,
+                description: `1.5% fee from buyer (${buyer.name.split(' ')[0]}) and seller (${seller.name.split(' ')[0]})`
+            });
+        }
+
+
+        alert(`Purchase successful! You have acquired ${amountToBuy.toLocaleString()} tokens for ${project.title}.`);
     };
 
     const handleRedeemPrincipal = (userId, projectId) => {
@@ -5695,16 +6033,20 @@ export default function App() {
         const listingFee = project.amountRaised * 0.03;
         const netWithdrawal = project.amountRaised - listingFee;
 
-        const updatedUser = {
-            ...users[currentUser.email],
-            wallet: {
-                ...users[currentUser.email].wallet,
-                usdt: users[currentUser.email].wallet.usdt + netWithdrawal,
-            }
-        };
+        const nextUsers = JSON.parse(JSON.stringify(users));
 
-        setUsers(prev => ({...prev, [currentUser.email]: updatedUser}));
-        setCurrentUser(updatedUser);
+        // Credit developer's wallet
+        const developer = nextUsers[currentUser.email];
+        developer.wallet.usdt += netWithdrawal;
+
+        // Credit admin's wallet with the fee
+        const admin = nextUsers['admin@demo.com'];
+        if (admin) {
+            admin.wallet.usdt = (admin.wallet.usdt || 0) + listingFee;
+        }
+
+        setUsers(nextUsers);
+        setCurrentUser(developer);
 
         setProjects(prev => prev.map(p => p.id === projectId ? {...p, fundsWithdrawn: true} : p));
 
@@ -5714,6 +6056,16 @@ export default function App() {
             amount: netWithdrawal,
             description: `Net payout of ${formatCurrency(netWithdrawal)} to treasury.`
         });
+        
+        // Log fee collection for admin
+        if (admin) {
+             addActivity(admin.id, {
+                type: 'Fee Collection',
+                project: project.title,
+                amount: listingFee,
+                description: `3% platform fee on capital withdrawal.`
+            });
+        }
 
         alert(`Withdrawal successful! ${formatCurrency(netWithdrawal)} has been sent to your treasury address.`);
     };
@@ -5779,7 +6131,7 @@ export default function App() {
         if (currentUser) {
             const activities = userActivities[currentUser.id] || [];
             switch (currentUser.type) {
-                case 'investor': return <InvestorDashboard currentUser={currentUser} projects={projects} portfolios={portfolios} marketListings={marketListings} onLogout={handleLogout} onClaimApy={handleClaimApy} onListToken={handleListToken} onInvest={handleInvest} onRedeemPrincipal={handleRedeemPrincipal} totalBalance={totalBalance} activities={activities} onExchange={handleCurrencyExchange} />;
+                case 'investor': return <InvestorDashboard currentUser={currentUser} projects={projects} portfolios={portfolios} marketListings={marketListings} onLogout={handleLogout} onClaimApy={handleClaimApy} onListToken={handleListToken} onInvest={handleInvest} onRedeemPrincipal={handleRedeemPrincipal} totalBalance={totalBalance} activities={activities} onExchange={handleCurrencyExchange} onBuyFromMarket={handleBuyFromMarket} />;
                 case 'developer': return <DeveloperDashboard currentUser={currentUser} projects={projects} portfolios={portfolios} marketListings={marketListings} onLogout={handleLogout} totalBalance={totalBalance} activities={activities} onCreateProject={handleCreateProject} onWithdrawFunds={handleWithdrawFunds} onDepositApyFunds={handleDepositApyFunds} />;
                 case 'admin': return <AdminDashboard currentUser={currentUser} projects={projects} users={users} onLogout={handleLogout} totalBalance={totalBalance} onUpdateProjectStatus={handleUpdateProjectStatus} onUpdateUser={handleUpdateUser} />;
                 default:
@@ -5814,6 +6166,16 @@ export default function App() {
         </div>
     );
 }
+
+
+
+
+
+
+
+
+
+
 
 
 
